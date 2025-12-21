@@ -1,9 +1,15 @@
 import httpx
 import re
-from lxml import html, etree
+from lxml import html
 from urllib.parse import urljoin
+from dotenv import load_dotenv
+from openai import OpenAI
+from pprint import pprint
 
-origin = "https://www.coskyler.com/"
+load_dotenv()
+client = OpenAI()
+
+origin = "https://www.romanbaths.co.uk/"
 
 res = httpx.get(origin).text
 tree = html.fromstring(res)
@@ -156,8 +162,196 @@ remove_whitespace(lines)
 dom_string = "\n".join(lines)
 
 inverted_links = {v: k for k, v in links.items()}
-prompt_env = "Prompt\n" + "".join(f"links[{k}]: {v}\n" for k, v in inverted_links.items())
+prompt_env = (
+    """
+You are an extraction agent.
+
+Input: text extracted from a tour operator’s webpage HTML.
+Hyperlinks referenced in the text are labeled inline as [L1], [L2], etc.
+
+Task:
+Identify tour products on the page. A product is a purchasable tour, activity, or package.
+Identify which links may contain additional product or pricing information.
+For each product extract:
+category (list of categories below)
+destination (city or region)
+price (number to 2 decimals if present converted to USD, otherwise null)
+
+Rules:
+Use only information present in the HTML
+Do not infer or guess missing data
+If no products or links are found, return empty arrays.
+Use null for unknown fields
+Be concise
+
+Output:
+Return ONLY valid JSON in this exact shape:
+
+{
+"relevant_links": ["L1", "L3"],
+"products": [
+{
+"category": null,
+"destination": null,
+"price": null
+}
+]
+}
+
+Category must match exactly one of the following:
+parasailing & paragliding
+skydiving
+arts & crafts
+education / cultural
+ax throwing
+bike and e-bike rentals
+bungee jumping
+camel rides
+caving & climbing
+escape room games
+extreme sports
+fitness classes
+flight simulator
+gear rentals
+hiking
+horseback riding
+martial arts classes
+off-road& atv
+games & entertainment centers
+other outdoor activities
+race track car racing (self-drive)
+shooting ranges
+shore excursions
+sports lessons
+swordsmanship classes
+tennis
+trams
+winter sports
+zipline & aerial adventure parks
+zorbing
+boat rentals
+fishing charters
+marinas
+river rafting, kayaking, canoeing
+scuba & snorkeling
+swim with dolphins
+water sports
+spas
+thermal & mineral springs
+yoga & pilates
+adventure parks
+amusement & theme parks
+amusement parks
+ghost towns
+water parks
+architectural landmark
+battlefields
+lighthouses
+monuments & statues
+other sites & landmarks
+art galleries
+art museums
+children's museums
+history & culture museums
+natural history museums
+science museums
+specialty museums
+gardens
+caverns & caves
+hot springs & geysers
+national & state parks
+other natural attractions
+waterfalls
+observation decks & towers
+aquariums
+zoo & aquariums
+zoos
+cultural events
+food & drink festivals
+music festivals
+concerts & shows
+dinner theaters
+experience nights
+theater, play or musical
+sporting events
+adrenaline & extreme tours
+adventure tours
+atv & off-road tours
+bike tours
+canyoning & rappelling tours
+climbing tours
+eco tours
+hiking & camping tours
+horseback riding tours
+motorcycle, scooter & moped tours
+nature & wildlife tours
+running tours
+safaris
+self-guided tours
+ski & snow tours
+wildlife tours
+boat tours
+dolphin & whale watching
+historical & heritage tours
+art & music tours
+cultural tours
+ghost & vampire tours
+movie & tv tours
+night tours
+shopping tours
+private tours
+tours
+beer tastings & tours
+coffee & tea tours
+cooking classes
+distillery or spirit tours
+food tours
+wine tours & tastings
+multi-day tours
+air tours
+balloon rides
+bus tours
+cable car tours
+car tours
+city tours
+classic car tours
+hop-on hop-off tours
+horse-drawn carriage tours
+luxury car tours
+rail tours
+sidecar tours
+sightseeing tours
+sports complexes
+day tours & excursions
+other tours
+vespa, scooter & moped tours
+walking tours
+sightseeing passes
+site tours
+bus or shuttle transportation
+helicopter transfers
+other ground transportation
+water transfers
+
+Hyperlink key:
+"""
+    + "".join(f"[L{k}] {v}\n" for k, v in inverted_links.items())
+    + "\nInput:\n"
+)
 
 prompt = prompt_env + "\n" + dom_string
 
 print(prompt)
+
+
+response = client.responses.create(
+    model="gpt-5-mini",
+    service_tier="flex",
+    input=prompt,
+    #text={"verbosity": "low"},
+    #reasoning={"effort": "low"},
+    prompt_cache_key="save me money pls",
+)
+
+print(response.model_dump_json(indent=2))
+print(response.output_text)
