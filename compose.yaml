@@ -7,7 +7,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - traveler_pgdata:/var/lib/postgresql/data
+      - traveler_pgdata:/var/lib/postgresql
       - ./jobs_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
 
 volumes:

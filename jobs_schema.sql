@@ -14,7 +14,7 @@ CREATE TABLE jobs (
     email                TEXT,
     phone                TEXT,
     operator_website     TEXT,
-    bookable             BOOLEAN,
+    bookable             TEXT,
     arival_category      TEXT,
     arival_sub_category  TEXT,
     avg_rating           NUMERIC(4,2),
