@@ -65,7 +65,7 @@ NAV_LINK_ATTRS = {
 URL_RE = re.compile(r'https?://[^\s"\'<>]+|/[^\s"\'<>]+')
 
 def classify_operator(origin):
-
+    print("origin: " + origin)
     return "TEST", "TEST"
 
     if not origin:
