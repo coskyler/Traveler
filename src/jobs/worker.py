@@ -1,12 +1,12 @@
 from src.db import pool
 from src.jobs.handler import classify_operator
 import src.jobs.export as export
-from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
-import csv
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, ALL_COMPLETED
+import traceback
 
-MAX_CONCURRENT_JOBS = 10
-JOB_LIMIT = 25
-START_ROW = 0
+MAX_CONCURRENT_JOBS = 25
+JOB_LIMIT = 100
+START_ROW = 50000
 
 export.start()
 
@@ -14,11 +14,12 @@ def job(t):
     row = list(t[3:])
 
     operator_url = row[9]
-    # print(operator_url)
+    # print(row)
 
-    classification, status = classify_operator(operator_url)
-    row[11] = classification
-    row.append(status)
+    category, sub_category, status, input_tokens, cached_tokens, output_tokens = classify_operator(operator_url)
+    row[11] = category
+    row[12] = sub_category
+    row += [status, input_tokens - cached_tokens, cached_tokens, output_tokens]
 
     export.append_csv(row)
 
@@ -49,11 +50,21 @@ with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS) as ex:
 
         if row is None:
             break
+        
+        f = ex.submit(job, row)
 
-        inflight.add(ex.submit(job, row))
+        def log_exception(fut):
+            exc = fut.exception()
+            if exc:
+                traceback.print_exception(type(exc), exc, exc.__traceback__)
+
+        f.add_done_callback(log_exception)
+        inflight.add(f)
 
         if len(inflight) >= MAX_CONCURRENT_JOBS:
             done, inflight = wait(inflight, return_when=FIRST_COMPLETED)
+
+wait(inflight, return_when=ALL_COMPLETED)
 
 pool.close()
 export.close_csv()

@@ -3,20 +3,24 @@ from threading import Thread
 import csv
 from datetime import datetime
 from pathlib import Path
+import traceback
 
 SENTINEL = object()
 
 _q = Queue()
 
 def _consumer():
-    while True:
-        row = _q.get()
-        if row is SENTINEL:
-            _f.close()
-            break
+    try:
+        while True:
+            row = _q.get()
+            if row is SENTINEL:
+                _f.close()
+                break
 
-        _w.writerow(row)
-        _f.flush()
+            _w.writerow(row)
+            _f.flush()
+    except Exception:
+        traceback.print_exc()
 
 def start():
     global _f, _w

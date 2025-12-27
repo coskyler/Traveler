@@ -1,15 +1,39 @@
 import httpx
 import re
+import json
 from lxml import html
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from dotenv import load_dotenv
 from openai import OpenAI
-from pprint import pprint
+import random
 
 load_dotenv()
 client = OpenAI()
 
+USER_AGENTS = [
+    # chrome / windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
 
+    # chrome / mac
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+
+    # firefox / windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) "
+    "Gecko/20100101 Firefox/122.0",
+]
+headers = {
+    "User-Agent": random.choice(USER_AGENTS),
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;"
+        "q=0.9,image/avif,image/webp,*/*;q=0.8"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+}
 INVISIBLE_TAGS = {
     "script",
     "style",
@@ -62,17 +86,109 @@ NAV_LINK_ATTRS = {
     # meta redirects
     "content",  # meta refresh only (needs parsing)
 }
+SOCIAL_ORIGINS = {
+    "facebook.com",
+    "instagram.com",
+    "tripadvisor.com",
+    "booking.com",
+    "expedia.com",
+    "viator.com",
+    "getyourguide.com",
+    "airbnb.com",
+    "klook.com",
+    "yelp.com",
+    "google.com",
+    "business.google.com",
+    "toursbylocals.com",
+    "peek.com",
+    "fareharbor.com",
+    "tiqets.com",
+    "withlocals.com",
+    "tripaneer.com",
+    "eventbrite.com",
+    "meetup.com",
+    "showaround.com",
+    "whatsapp.com",
+    "messenger.com",
+    "telegram.org",
+    "wechat.com",
+    "line.me",
+    "tiktok.com",
+    "x.com",
+    "linkedin.com",
+    "reddit.com",
+    "youtube.com",
+    "pinterest.com",
+}
 URL_RE = re.compile(r'https?://[^\s"\'<>]+|/[^\s"\'<>]+')
 
+def _is_social_url(url):
+    for u in SOCIAL_ORIGINS:
+        if u in url:
+            return True, u
+        
+    return False, None
+
+def _is_valid_url(s):
+    try:
+        urlparse(s)
+        return True
+    except Exception:
+        return False
+    
+def _parse_llm_output(s):
+    m = re.search(r'\{.*\}', s, re.S)
+    if not m:
+        raise ValueError("No JSON found")
+
+    data = json.loads(m.group())
+
+    # validate
+    assert set(data) == {"category", "sub_category", "status"}
+    
+    # assert data["status"] in {
+    #     "Success",
+    #     "Err: Not an operator website",
+    #     "Err: Insufficient information",
+    # }
+    # if data["status"] != "Success":
+    #     assert data["category"] is None
+    #     assert data["sub_category"] is None
+    
+    return data
+
 def classify_operator(origin):
-    print("origin: " + origin)
-    return "TEST", "TEST"
-
     if not origin:
-        return ""
+        return "", "", "Err: No website link", 0, 0, 0
+    
+    is_social, social_url = _is_social_url(origin)
 
-    res = httpx.get(origin).text
-    tree = html.fromstring(res)
+    if is_social:
+        return "", "", "Err: social platform (" + social_url + ")", 0, 0, 0
+    
+    if not _is_valid_url(origin):
+        return "", "", "Err: Invalid or insecure URL", 0, 0, 0
+    
+    print("Crawling " + origin)
+
+    tree = None
+
+    try:
+        r = httpx.get(
+            origin,
+            headers=headers,
+            follow_redirects=True,
+            timeout=15,
+        )
+
+        res = r.text
+
+        if not res.strip():
+            return "", "", "Err: Invalid response text", 0, 0, 0
+
+        tree = html.fromstring(res)
+    except httpx.RequestError:
+        return "", "", "Err: Invalid response", 0, 0, 0
 
 
     lines = []
@@ -102,7 +218,10 @@ def classify_operator(origin):
             # srcset-style attributes
             if "," in val:
                 for part in val.split(","):
-                    url = part.strip().split()[0]
+                    tokens = part.strip().split()
+                    if not tokens:
+                        continue
+                    url = tokens[0]
                     if url:
                         found.add(url)
             else:
@@ -169,185 +288,207 @@ def classify_operator(origin):
     inverted_links = {v: k for k, v in links.items()}
     prompt_env = (
         """
-    You are an extraction agent.
+You are crawling a (likely) tour/activity/attraction company's website. Your task is to categorize it into my taxonomy.
 
-    Input: text extracted from a tour operator’s webpage HTML.
-    Hyperlinks referenced in the text are labeled inline as [L1], [L2], etc.
+Respond with a parsable JSON ONLY (no markdowns, no comments) with this exact type:
+{
+category: string;
+sub_category: string;
+status: "Success" | "Err: Not an operator website" | "Err: Insufficient information" | "Err: Website error";
+}
 
-    Task:
-    Identify tour products on the page. A product is a purchasable tour, activity, or package.
-    Identify which links may contain additional product or pricing information.
-    For each product extract:
-    category (list of categories below)
-    destination (city or region)
-    price (number to 2 decimals if present converted to USD, otherwise null)
+IF THE WEBSITE IS NOT A PRIVATE TOUR/ACTIVITY/ATTRACTION OPERATOR (E.G. GOVERNMENT, INFORMATIONAL, NON-PROFIT), IMMEDIATELY RESPOND WITH THE APPROPRIATE STATUS
+IF STATUS IS NOT Success, category AND sub_category MUST BE AN EMPTY STRING
 
-    Rules:
-    Use only information present in the HTML
-    Do not infer or guess missing data
-    If no products or links are found, return empty arrays.
-    Use null for unknown fields
-    Be concise
+TAXONOMY:
+Air-based adventure, activity, or rentals
+  - Parasailing & Paragliding
+  - Skydiving
 
-    Output:
-    Return ONLY valid JSON in this exact shape:
+Cultural activity, experience or classes
+  - Arts & Crafts
+  - Education / Cultural
 
-    {
-    "relevant_links": ["L1", "L3"],
-    "products": [
-    {
-    "category": null,
-    "destination": null,
-    "price": null
-    }
-    ]
-    }
+Land-based adventure, activity, or rentals
+  - Ax Throwing
+  - Bike and E-Bike Rentals
+  - Bungee Jumping
+  - Camel Rides
+  - Caving & Climbing
+  - Escape Room Games
+  - Extreme Sports
+  - Fitness Classes
+  - Flight Simulator
+  - Gear Rentals
+  - Hiking
+  - Horseback Riding
+  - Martial Arts Classes
+  - Off-Road & ATV
+  - Games & Entertainment Centers
+  - Other Outdoor Activities
+  - Race Track Car Racing (self-drive)
+  - Shooting Ranges
+  - Shore Excursions
+  - Sports Lessons
+  - Swordsmanship Classes
+  - Tennis
+  - Trams
+  - Winter Sports
+  - Zipline & Aerial Adventure Parks
+  - Zorbing
 
-    Category must match exactly one of the following:
-    parasailing & paragliding
-    skydiving
-    arts & crafts
-    education / cultural
-    ax throwing
-    bike and e-bike rentals
-    bungee jumping
-    camel rides
-    caving & climbing
-    escape room games
-    extreme sports
-    fitness classes
-    flight simulator
-    gear rentals
-    hiking
-    horseback riding
-    martial arts classes
-    off-road& atv
-    games & entertainment centers
-    other outdoor activities
-    race track car racing (self-drive)
-    shooting ranges
-    shore excursions
-    sports lessons
-    swordsmanship classes
-    tennis
-    trams
-    winter sports
-    zipline & aerial adventure parks
-    zorbing
-    boat rentals
-    fishing charters
-    marinas
-    river rafting, kayaking, canoeing
-    scuba & snorkeling
-    swim with dolphins
-    water sports
-    spas
-    thermal & mineral springs
-    yoga & pilates
-    adventure parks
-    amusement & theme parks
-    amusement parks
-    ghost towns
-    water parks
-    architectural landmark
-    battlefields
-    lighthouses
-    monuments & statues
-    other sites & landmarks
-    art galleries
-    art museums
-    children's museums
-    history & culture museums
-    natural history museums
-    science museums
-    specialty museums
-    gardens
-    caverns & caves
-    hot springs & geysers
-    national & state parks
-    other natural attractions
-    waterfalls
-    observation decks & towers
-    aquariums
-    zoo & aquariums
-    zoos
-    cultural events
-    food & drink festivals
-    music festivals
-    concerts & shows
-    dinner theaters
-    experience nights
-    theater, play or musical
-    sporting events
-    adrenaline & extreme tours
-    adventure tours
-    atv & off-road tours
-    bike tours
-    canyoning & rappelling tours
-    climbing tours
-    eco tours
-    hiking & camping tours
-    horseback riding tours
-    motorcycle, scooter & moped tours
-    nature & wildlife tours
-    running tours
-    safaris
-    self-guided tours
-    ski & snow tours
-    wildlife tours
-    boat tours
-    dolphin & whale watching
-    historical & heritage tours
-    art & music tours
-    cultural tours
-    ghost & vampire tours
-    movie & tv tours
-    night tours
-    shopping tours
-    private tours
-    tours
-    beer tastings & tours
-    coffee & tea tours
-    cooking classes
-    distillery or spirit tours
-    food tours
-    wine tours & tastings
-    multi-day tours
-    air tours
-    balloon rides
-    bus tours
-    cable car tours
-    car tours
-    city tours
-    classic car tours
-    hop-on hop-off tours
-    horse-drawn carriage tours
-    luxury car tours
-    rail tours
-    sidecar tours
-    sightseeing tours
-    sports complexes
-    day tours & excursions
-    other tours
-    vespa, scooter & moped tours
-    walking tours
-    sightseeing passes
-    site tours
-    bus or shuttle transportation
-    helicopter transfers
-    other ground transportation
-    water transfers
+Water-based adventure, activity, or rentals
+  - Boat Rentals
+  - Fishing Charters
+  - Marinas
+  - River Rafting, Kayaking, Canoeing
+  - Scuba & Snorkeling
+  - Swim with Dolphins
+  - Water Sports
 
-    Hyperlink key:
-    """
+Wellness
+  - Spas
+  - Thermal & Mineral Springs
+  - Yoga & Pilates
+
+Amusement & Theme Parks
+  - Adventure Parks
+  - Amusement Parks
+  - Ghost Towns
+  - Water Parks
+
+Cultural Sites & Landmarks
+  - Architectural Landmark
+  - Battlefields
+  - Lighthouses
+  - Monuments & Statues
+  - Other Sites & Landmarks
+
+Museums & Galleries
+  - Art Galleries
+  - Art Museums
+  - Children's Museums
+  - History & Culture Museums
+  - Natural History Museums
+  - Science Museums
+  - Specialty Museums
+
+Natural Attraction
+  - Gardens
+  - Caverns & Caves
+  - Hot Springs & Geysers
+  - National & State Parks
+  - Other Natural Attractions
+  - Waterfalls
+
+Observation Decks & Towers
+  - Observation Decks & Towers
+
+Zoos & Aquariums
+  - Aquariums
+  - Zoos
+
+Festivals
+  - Cultural Events
+  - Food & Drink Festivals
+  - Music Festivals
+
+Performing arts
+  - Concerts & Shows
+  - Cultural Events
+  - Dinner Theaters
+  - Experience Nights
+  - Theater, Play or Musical
+
+Sporting event
+  - Sporting Events
+
+Active / adventure
+  - Adrenaline & Extreme Tours
+  - Adventure Tours
+  - ATV & Off-Road Tours
+  - Bike Tours
+  - Canyoning & Rappelling Tours
+  - Climbing Tours
+  - Eco Tours
+  - Hiking & Camping Tours
+  - Horseback Riding Tours
+  - Motorcycle, Scooter & Moped Tours
+  - Nature & Wildlife Tours
+  - Running Tours
+  - Safaris
+  - Self-guided Tours
+  - Ski & Snow Tours
+  - Wildlife Tours
+
+Boat Tours
+  - Boat Tours
+  - Dolphin & Whale Watching
+
+Cultural & Specialty Tours
+  - Art & Music Tours
+  - Cultural Tours
+  - Ghost & Vampire Tours
+  - Historical & Heritage Tours
+  - Movie & TV Tours
+  - Night Tours
+  - Private Tours
+  - Self-guided Tours
+  - Shopping Tours
+  - Tours
+
+Food & Drink
+  - Beer Tastings & Tours
+  - Coffee & Tea Tours
+  - Cooking Classes
+  - Distillery or Spirit Tours
+  - Food Tours
+  - Wine Tours & Tastings
+
+Multi-day Tours
+  - Multi-day Tours
+
+Sightseeing
+  - Air Tours
+  - Balloon Rides
+  - Bus Tours
+  - Cable Car Tours
+  - Car Tours
+  - City Tours
+  - Classic Car Tours
+  - Day Tours & Excursions
+  - Hop-On Hop-Off Tours
+  - Horse-Drawn Carriage Tours
+  - Luxury Car Tours
+  - Other Tours
+  - Private Tours
+  - Rail Tours
+  - Sidecar Tours
+  - Sightseeing Tours
+  - Sightseeing Passes
+  - Sports Complexes
+  - Vespa, Scooter & Moped Tours
+  - Walking Tours
+
+Tour of a specific attraction
+  - Site Tours
+
+Transportation
+  - Bus or Shuttle Transportation
+  - Helicopter Transfers
+  - Other Ground Transportation
+  - Water Transfers
+
+YOU ARE CRAWLING:
+""" + origin + """
+
+HYPERLINK KEY:
+"""
         + "".join(f"[L{k}] {v}\n" for k, v in inverted_links.items())
-        + "\nInput:\n"
+        + "\nWEBSITE HTML:\n"
     )
 
     prompt = prompt_env + "\n" + dom_string
-
-    print(prompt)
-
 
     response = client.responses.create(
         model="gpt-5-mini",
@@ -358,5 +499,12 @@ def classify_operator(origin):
         prompt_cache_key="save me money pls",
     )
 
-    print(response.model_dump_json(indent=2))
-    print(response.output_text)
+    # print(prompt)
+    # print(response.model_dump_json(indent=2))
+    # print(response.output_text)
+
+    parsed = _parse_llm_output(response.output_text)
+
+    return parsed["category"], parsed["sub_category"], parsed["status"], response.usage.input_tokens, response.usage.input_tokens_details.cached_tokens, response.usage.output_tokens
+
+    
