@@ -12,9 +12,11 @@ def _consumer():
     while True:
         row = _q.get()
         if row is SENTINEL:
+            _f.close()
             break
 
         _w.writerow(row)
+        _f.flush()
 
 def start():
     global _f, _w
