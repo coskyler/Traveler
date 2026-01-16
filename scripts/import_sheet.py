@@ -5,7 +5,7 @@
 # Avg. Rating,Review Count,Number of Products
 
 from pathlib import Path
-from src.db import pool
+from crawler.db import pool
 import csv
 from io import StringIO
 

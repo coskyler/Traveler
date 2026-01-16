@@ -1,11 +1,11 @@
-from src.db import pool
-from src.jobs.handler import classify_operator
-import src.jobs.export as export
+from crawler.db import pool
+from crawler.jobs.handler import classify_operator
+import crawler.jobs.export as export
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, ALL_COMPLETED
 import traceback
 
 MAX_CONCURRENT_JOBS = 25
-JOB_LIMIT = 100
+JOB_LIMIT = 1
 START_ROW = 50000
 
 export.start()
