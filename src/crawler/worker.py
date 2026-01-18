@@ -1,6 +1,6 @@
 from crawler.db import pool
-from crawler.jobs.handler import classify_operator
-import crawler.jobs.export as export
+from crawler.handler import classify_operator
+import crawler.export as export
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, ALL_COMPLETED
 import traceback
 
