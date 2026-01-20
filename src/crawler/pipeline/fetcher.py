@@ -75,10 +75,10 @@ def _is_valid_url(url: str) -> bool:
 
 
 def fetch(url: str) -> FetchResult:
-    if not _is_valid_url(url):
+    if not url or not _is_valid_url(url):
         return FetchResult(ok=False, url=url, message="Invalid URL")
     
-    if not _is_social_url(url):
+    if _is_social_url(url):
         return FetchResult(ok=False, url=url, message="Social URL")
     
     try:
@@ -98,6 +98,9 @@ def fetch(url: str) -> FetchResult:
             follow_redirects=True,
             timeout=15,
         )
+
+        content_type = (r.headers.get("content-type") or "").lower()
+        print(content_type)
 
         return FetchResult(ok=True, url=url, text=r.text)
     except httpx.RequestError as e:
