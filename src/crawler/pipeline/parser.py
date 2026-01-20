@@ -59,11 +59,18 @@ _NAV_LINK_ATTRS = {"href", "action", "formaction", "data-href", "data-url"}
 
 _URL_RE = re.compile(r'https?://[^\s"\'<>]+|/[^\s"\'<>]+')
 _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+import re
+
 _PHONE_RE = re.compile(
     r"(?<!\d)"
-    r"(?:\+?\d{1,3}[\s\-\.]?)?"
-    r"(?:\(?\d{1,4}\)?[\s\-\.]?)?"
-    r"(?:\d[\s\-\.]?){6,12}\d"
+    r"(?!\d{1,2}[\/\-.]\d{1,2}(?:[\/\-.]\d{2,4})\b)"   # reject dd/mm(/yyyy), dd-mm-yy, etc.
+    r"(?:"
+      r"(?:\+|00)\s*\d{1,3}"                           # +CC or 00CC
+      r"(?:[ \-.\u00A0()]?\d){7,14}"                   # 8–17 digits total-ish (incl CC), must be digit-heavy
+      r"|"
+      r"\(?\d{1,4}\)?[ \-.\u00A0]"                     # national: requires a separator after area/group
+      r"(?:\d{2,4}[ \-.\u00A0]?){2,6}\d{2,4}"          # 8–16 digits total, grouped
+    r")"
     r"(?!\d)"
 )
 
