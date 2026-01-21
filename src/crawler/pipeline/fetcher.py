@@ -1,17 +1,10 @@
 import httpx
 import random
-from pydantic import BaseModel
 from urllib.parse import urlparse
 import logging
+from crawler.pipeline.types import FetchResult
 
 log = logging.getLogger(__name__)
-
-
-class FetchResult(BaseModel):
-    ok: bool
-    url: str | None = None
-    text: str | None = None
-    message: str | None = None
 
 
 _USER_AGENTS = [
@@ -76,10 +69,10 @@ def _is_valid_url(url: str) -> bool:
 
 def fetch(url: str) -> FetchResult:
     if not url or not _is_valid_url(url):
-        return FetchResult(ok=False, url=url, message="Invalid URL")
+        return FetchResult(ok=False, message="Invalid URL")
     
     if _is_social_url(url):
-        return FetchResult(ok=False, url=url, message="Social URL")
+        return FetchResult(ok=False, message="Social URL")
     
     try:
         r = httpx.get(
@@ -99,10 +92,15 @@ def fetch(url: str) -> FetchResult:
             timeout=15,
         )
 
-        content_type = (r.headers.get("content-type") or "").lower()
-        print(content_type)
+        if not r.is_success:
+            return FetchResult(ok=False, message=f"Request error: {r.status_code}")
 
-        return FetchResult(ok=True, url=url, text=r.text)
+        content_type = (r.headers.get("content-type") or "").lower()
+        if "html" not in content_type:
+            return FetchResult(ok=False, message="Non-HTML response")
+
+
+        return FetchResult(ok=True, url=str(r.url), text=r.text)
     except httpx.RequestError as e:
         log.error("Fetch failed: %s", e)
-        return FetchResult(ok=False, url=url, message="Request error")
+        return FetchResult(ok=False, message="Httpx error")

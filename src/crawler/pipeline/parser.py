@@ -1,22 +1,10 @@
-from pydantic import BaseModel
 from lxml import html
 from lxml.html import HtmlElement
 from lxml.etree import ParserError
-from crawler.pipeline.fetcher import FetchResult
+from crawler.pipeline.types import FetchResult, ParseResult
 import re
 from urllib.parse import urljoin, urlparse, urlunparse
 from publicsuffix2 import get_sld
-
-
-class ParseResult(BaseModel):
-    ok: bool
-    url: str
-    hyperlink_key_text: str | None = None
-    parsed_text: str | None = None
-    emails: list[str] | None = None
-    phones: list[str] | None = None
-    socials: dict[str, str] | None = None # facebook, instagram, youtube, tiktok, x, tripadvisor
-    message: str | None = None
 
 
 _INVISIBLE_TAGS = {
@@ -190,7 +178,7 @@ def parse(fetched: FetchResult) -> ParseResult:
     try:
         root = html.fromstring(fetched.text)
     except ParserError:
-        return ParseResult(ok=False, url=fetched.url, message="Parse error")
+        return ParseResult(ok=False, message="Parse error")
 
     lines = []
     links = {}
@@ -200,7 +188,7 @@ def parse(fetched: FetchResult) -> ParseResult:
     _walk(root, fetched.url, lines, links, emails, phones)
 
     if not lines:
-        return ParseResult(ok=False, url=fetched.url, message="Parse error")
+        return ParseResult(ok=False, message="Parse error")
 
     _remove_whitespace(lines)
 
@@ -234,7 +222,6 @@ def parse(fetched: FetchResult) -> ParseResult:
 
     return ParseResult(
         ok=True,
-        url=fetched.url,
         parsed_text=parsed_text,
         hyperlink_key_text=hyperlink_key_text,
         emails=list(emails),
