@@ -1,4 +1,4 @@
-from crawler.pipeline.types import OperatorInfo, ParseResult, ClassifyResult
+from crawler.pipeline.types import OperatorInfo, Profile, ParseResult, ClassifyResult
 from openai import OpenAI
 from dotenv import load_dotenv
 import json
@@ -170,15 +170,43 @@ def _top_level_category(sub_category: str) -> str | None:
 
 _PROMPT_CONTEXT = """
 You are crawling a website that is presumed to be a specific private tour/activity/attraction operator's website. Your task is to confirm that it is a real operator's website and that it belongs to the specified operator.
-If it is, the status is OK and you will categorize it and determine the website's booking method (if there is a book button, form submission, or simply contact info). If you cannot infer the booking method from the landing HTML, you will, only if necessary, choose 1 hyperlink to follow which likely contains the needed information.
+If it is, the status is OK and you will categorize it and determine the website's booking method (if there is a book button, form submission, or simply contact info). If you cannot infer the booking method, you will, only if necessary, choose 1 hyperlink to follow which likely contains the needed information if available. You will also choose 1 hyperlink to follow to website's contact page if available; if there is no contact page and contact information is available in the current page, enter the URL of the page you are currently crawling in "follow_contact".
 If not (e.g., government, public park, non-profit, misc., etc.), immediately respond with the appropriate status.
 
 Respond with a parsable JSON only (no markdowns, no comments) with this exact type:
 {
-    category: "Parasailing & Paragliding" | "Skydiving" | "Arts & Crafts" | "Education / Cultural" | "Ax Throwing" | "Bike and E-Bike Rentals" | "Bungee Jumping" | "Camel Rides" | "Caving & Climbing" | "Escape Room Games" | "Extreme Sports" | "Fitness Classes" | "Flight Simulator" | "Gear Rentals" | "Hiking" | "Horseback Riding" | "Martial Arts Classes" | "Off-Road & ATV" | "Games & Entertainment Centers" | "Other Outdoor Activities" | "Race Track Car Racing (self-drive)" | "Shooting Ranges" | "Shore Excursions" | "Sports Lessons" | "Swordsmanship Classes" | "Tennis" | "Trams" | "Winter Sports" | "Zipline & Aerial Adventure Parks" | "Zorbing" | "Boat Rentals" | "Fishing Charters" | "Marinas" | "River Rafting, Kayaking, Canoeing" | "Scuba & Snorkeling" | "Swim with Dolphins" | "Water Sports" | "Spas" | "Thermal & Mineral Springs" | "Yoga & Pilates" | "Adventure Parks" | "Amusement Parks" | "Ghost Towns" | "Water Parks" | "Architectural Landmark" | "Battlefields" | "Lighthouses" | "Monuments & Statues" | "Other Sites & Landmarks" | "Art Galleries" | "Art Museums" | "Children's Museums" | "History & Culture Museums" | "Natural History Museums" | "Science Museums" | "Specialty Museums" | "Gardens" | "Caverns & Caves" | "Hot Springs & Geysers" | "National & State Parks" | "Other Natural Attractions" | "Waterfalls" | "Observation Decks & Towers" | "Aquariums" | "Zoos" | "Cultural Events" | "Food & Drink Festivals" | "Music Festivals" | "Concerts & Shows" | "Cultural Events" | "Dinner Theaters" | "Experience Nights" | "Theater, Play or Musical" | "Sporting Events" | "Adrenaline & Extreme Tours" | "Adventure Tours" | "ATV & Off-Road Tours" | "Bike Tours" | "Canyoning & Rappelling Tours" | "Climbing Tours" | "Eco Tours" | "Hiking & Camping Tours" | "Horseback Riding Tours" | "Motorcycle, Scooter & Moped Tours" | "Nature & Wildlife Tours" | "Running Tours" | "Safaris" | "Self-guided Tours" | "Ski & Snow Tours" | "Wildlife Tours" | "Boat Tours" | "Dolphin & Whale Watching" | "Art & Music Tours" | "Cultural Tours" | "Ghost & Vampire Tours" | "Historical & Heritage Tours" | "Movie & TV Tours" | "Night Tours" | "Private Tours" | "Self-guided Tours" | "Shopping Tours" | "Tours" | "Beer Tastings & Tours" | "Coffee & Tea Tours" | "Cooking Classes" | "Distillery or Spirit Tours" | "Food Tours" | "Wine Tours & Tastings" | "Multi-day Tours" | "Air Tours" | "Balloon Rides" | "Bus Tours" | "Cable Car Tours" | "Car Tours" | "City Tours" | "Classic Car Tours" | "Day Tours & Excursions" | "Hop-On Hop-Off Tours" | "Horse-Drawn Carriage Tours" | "Luxury Car Tours" | "Other Tours" | "Private Tours" | "Rail Tours" | "Sidecar Tours" | "Sightseeing Tours" | "Sightseeing Passes" | "Sports Complexes" | "Vespa, Scooter & Moped Tours" | "Walking Tours" | "Site Tours" | "Bus or Shuttle Transportation" | "Helicopter Transfers" | "Other Ground Transportation" | "Water Transfers" | null;
-    booking_method: "Onling Booking" | "Form Submission" | "Contact Info" | "Cannot Infer" | null; // if multiple options are applicable, choose the firstmost option
     status: "OK" | "Website does not belong to specified operator" | "Not an operator website" | "Insufficient information: website likely requires JavaScript rendering" | `Other error: ${string}`; // if multiple options are applicable, choose the firstmost option
-    next: string | null;
+    category: "Parasailing & Paragliding" | "Skydiving" | "Arts & Crafts" | "Education / Cultural" | "Ax Throwing" | "Bike and E-Bike Rentals" | "Bungee Jumping" | "Camel Rides" | "Caving & Climbing" | "Escape Room Games" | "Extreme Sports" | "Fitness Classes" | "Flight Simulator" | "Gear Rentals" | "Hiking" | "Horseback Riding" | "Martial Arts Classes" | "Off-Road & ATV" | "Games & Entertainment Centers" | "Other Outdoor Activities" | "Race Track Car Racing (self-drive)" | "Shooting Ranges" | "Shore Excursions" | "Sports Lessons" | "Swordsmanship Classes" | "Tennis" | "Trams" | "Winter Sports" | "Zipline & Aerial Adventure Parks" | "Zorbing" | "Boat Rentals" | "Fishing Charters" | "Marinas" | "River Rafting, Kayaking, Canoeing" | "Scuba & Snorkeling" | "Swim with Dolphins" | "Water Sports" | "Spas" | "Thermal & Mineral Springs" | "Yoga & Pilates" | "Adventure Parks" | "Amusement Parks" | "Ghost Towns" | "Water Parks" | "Architectural Landmark" | "Battlefields" | "Lighthouses" | "Monuments & Statues" | "Other Sites & Landmarks" | "Art Galleries" | "Art Museums" | "Children's Museums" | "History & Culture Museums" | "Natural History Museums" | "Science Museums" | "Specialty Museums" | "Gardens" | "Caverns & Caves" | "Hot Springs & Geysers" | "National & State Parks" | "Other Natural Attractions" | "Waterfalls" | "Observation Decks & Towers" | "Aquariums" | "Zoos" | "Cultural Events" | "Food & Drink Festivals" | "Music Festivals" | "Concerts & Shows" | "Cultural Events" | "Dinner Theaters" | "Experience Nights" | "Theater, Play or Musical" | "Sporting Events" | "Adrenaline & Extreme Tours" | "Adventure Tours" | "ATV & Off-Road Tours" | "Bike Tours" | "Canyoning & Rappelling Tours" | "Climbing Tours" | "Eco Tours" | "Hiking & Camping Tours" | "Horseback Riding Tours" | "Motorcycle, Scooter & Moped Tours" | "Nature & Wildlife Tours" | "Running Tours" | "Safaris" | "Self-guided Tours" | "Ski & Snow Tours" | "Wildlife Tours" | "Boat Tours" | "Dolphin & Whale Watching" | "Art & Music Tours" | "Cultural Tours" | "Ghost & Vampire Tours" | "Historical & Heritage Tours" | "Movie & TV Tours" | "Night Tours" | "Private Tours" | "Self-guided Tours" | "Shopping Tours" | "Tours" | "Beer Tastings & Tours" | "Coffee & Tea Tours" | "Cooking Classes" | "Distillery or Spirit Tours" | "Food Tours" | "Wine Tours & Tastings" | "Multi-day Tours" | "Air Tours" | "Balloon Rides" | "Bus Tours" | "Cable Car Tours" | "Car Tours" | "City Tours" | "Classic Car Tours" | "Day Tours & Excursions" | "Hop-On Hop-Off Tours" | "Horse-Drawn Carriage Tours" | "Luxury Car Tours" | "Other Tours" | "Private Tours" | "Rail Tours" | "Sidecar Tours" | "Sightseeing Tours" | "Sightseeing Passes" | "Sports Complexes" | "Vespa, Scooter & Moped Tours" | "Walking Tours" | "Site Tours" | "Bus or Shuttle Transportation" | "Helicopter Transfers" | "Other Ground Transportation" | "Water Transfers" | null;
+    booking_method: "Online Booking" | "Form Submission" | "Contact Info" | "Cannot Infer" | null; // if multiple options are applicable, choose the firstmost option
+    follow_contact: string | null;
+    follow_booking: string | null;
+}
+
+"""
+
+_BOOKING_PROMPT_CONTEXT = """
+You are crawling a tour operator's website. Your task is to determine what booking method they use, whether they offer online booking, or just a form, or just contact information. Make your best educated guess.
+
+Respond with a parsable JSON only (no markdowns, no comments) with this exact type:
+{
+    booking_method: "Online Booking" | "Form Submission" | "Contact Info" | "Cannot Infer"; // if multiple options are applicable, choose the firstmost option
+}
+
+"""
+
+_CONTACTS_PROMPT_CONTEXT = """
+You are crawling the contacts page of a tour operator's website. You will return a list of profiles as complete as possible given the information. If no information is available, profiles should be an empty list. A profile should only be added if it contains at least one method of contact. Do not add multiple profiles with the same contact information.
+
+Respond with a parsable JSON only (no markdowns, no comments) with this exact type:
+{
+  profiles: {
+    profile_type: "Company" | "Individual"; // assume "Company" unless specified
+    role: "Owner" | "Manager" | "Guide" | "Booking Agent" | "Support" | "Unknown" | null; // null if profile_type is "Company"
+    profile_name: string | null; // Name of the individual or null
+    email: string | null;
+    phone: string | null;
+    whatsapp: string | null;
+  }[];
 }
 
 """
@@ -186,6 +214,17 @@ Respond with a parsable JSON only (no markdowns, no comments) with this exact ty
 
 def _validate_llm_output(res: dict) -> bool:
     if not isinstance(res, dict):
+        return False
+
+    # exact shape
+    REQUIRED_KEYS = {
+        "status",
+        "category",
+        "booking_method",
+        "follow_contact",
+        "follow_booking",
+    }
+    if set(res.keys()) != REQUIRED_KEYS:
         return False
 
     CATEGORIES = {
@@ -322,35 +361,116 @@ def _validate_llm_output(res: dict) -> bool:
         "Water Transfers",
     }
 
-    BOOKING = {"Onling Booking", "Form submission", "Contact Info"}
-    STATUS_FIXED = {
-        "OK",
-        "Not an operator website",
-        "Website does not belong to specified operator",
-        "Insufficient information: website likely requires JavaScript rendering",
+    BOOKING = {
+        "Online Booking",
+        "Form Submission",
+        "Contact Info",
+        "Cannot Infer",
     }
 
-    # category
-    if res.get("category") is not None and res.get("category") not in CATEGORIES:
-        return False
-
-    # booking_method
-    if (
-        res.get("booking_method") is not None
-        and res.get("booking_method") not in BOOKING
-    ):
-        return False
+    STATUS_FIXED = {
+        "OK",
+        "Website does not belong to specified operator",
+        "Not an operator website",
+        "Insufficient information: website likely requires JavaScript rendering",
+    }
 
     # status
     status = res.get("status")
     if not isinstance(status, str):
         return False
-    if status not in STATUS_FIXED and not status.startswith("Other error: "):
+    if status in STATUS_FIXED:
+        pass
+    elif status.startswith("Other error: "):
+        if len(status) <= len("Other error: "):
+            return False
+    else:
         return False
 
-    # next
-    if res.get("next") is not None and not isinstance(res.get("next"), str):
+    # category
+    cat = res.get("category")
+    if cat is not None and cat not in CATEGORIES:
         return False
+
+    # booking_method
+    bm = res.get("booking_method")
+    if bm is not None and bm not in BOOKING:
+        return False
+
+    # follow_contact
+    fc = res.get("follow_contact")
+    if fc is not None:
+        if not isinstance(fc, str) or not fc.strip():
+            return False
+
+    # follow_booking
+    fb = res.get("follow_booking")
+    if fb is not None:
+        if not isinstance(fb, str) or not fb.strip():
+            return False
+
+    return True
+
+
+def _validate_llm_booking_output(res: dict) -> bool:
+    return (
+        isinstance(res, dict)
+        and set(res) == {"booking_method"}
+        and res["booking_method"]
+        in {
+            "Online Booking",
+            "Form Submission",
+            "Contact Info",
+            "Cannot Infer",
+        }
+    )
+
+
+def _validate_llm_contacts_output(res: dict) -> bool:
+    if not isinstance(res, dict) or set(res) != {"profiles"}:
+        return False
+
+    profiles = res["profiles"]
+    if not isinstance(profiles, list):
+        return False
+
+    allowed_profile_types = {"Company", "Individual"}
+    allowed_roles = {
+        "Owner",
+        "Manager",
+        "Guide",
+        "Booking Agent",
+        "Support",
+        "Unknown",
+    }
+
+    for p in profiles:
+        if not isinstance(p, dict):
+            return False
+
+        if set(p) != {
+            "profile_type",
+            "role",
+            "profile_name",
+            "email",
+            "phone",
+            "whatsapp",
+        }:
+            return False
+
+        if p["profile_type"] not in allowed_profile_types:
+            return False
+
+        if p["profile_type"] == "Company":
+            if p["role"] is not None:
+                return False
+        else:
+            if p["role"] not in allowed_roles and p["role"] is not None:
+                return False
+
+        for k in ("profile_name", "email", "phone", "whatsapp"):
+            if p[k] is not None and not isinstance(p[k], str):
+                return False
 
     return True
 
@@ -392,10 +512,112 @@ def classify(parsed: ParseResult, operator: OperatorInfo) -> ClassifyResult:
     if not _validate_llm_output(parsed_output):
         return ClassifyResult(ok=False, message="ChatGPT provided invalid JSON schema")
 
+    if parsed_output["status"] != "OK":
+        return ClassifyResult(ok=False, message=parsed_output["status"])
+
     return ClassifyResult(
         ok=True,
         category=_top_level_category(parsed_output["category"]),
         sub_category=parsed_output["category"],
         booking_method=parsed_output["booking_method"],
-        message=parsed_output["status"]
+        follow_booking=parsed_output["follow_booking"],
+        follow_contact=parsed_output["follow_contact"],
     )
+
+
+def classify_booking(parsed: ParseResult, operator: OperatorInfo) -> ClassifyResult:
+    prompt = (
+        _BOOKING_PROMPT_CONTEXT
+        + "Specified operator: "
+        + operator.name
+        + "\nSpecified operator location: "
+        + (operator.city + (", " if operator.city else "") + operator.country)
+        + "\n\nYou are crawling "
+        + operator.url
+        + "\n\nHyperlink key:\n"
+        + parsed.hyperlink_key_text
+        + "\n\nWebsite HTML:\n"
+        + parsed.parsed_text
+    )
+
+    # openai request
+    try:
+        res = client.responses.create(
+            model="gpt-5-mini",
+            service_tier="flex",
+            input=prompt,
+            # text={"verbosity": "low"},
+            # reasoning={"effort": "low"},
+            # prompt_cache_key="AOIOUSJD98231u89hKAJSHf1982u3JKAHSDAKSHJD1982zxkhfkl",
+        )
+    except Exception:
+        return ClassifyResult(ok=False, message="ChatGPT API error")
+
+    # validate response
+    try:
+        parsed_output = json.loads(res.output_text)
+    except json.JSONDecodeError:
+        return ClassifyResult(ok=False, message="ChatGPT provided invalid JSON")
+
+    if not _validate_llm_booking_output(parsed_output):
+        return ClassifyResult(ok=False, message="ChatGPT provided invalid JSON schema")
+
+    return ClassifyResult(ok=True, booking_method=parsed_output["booking_method"])
+
+
+def classify_contacts(parsed: ParseResult, operator: OperatorInfo) -> ClassifyResult:
+    prompt = (
+        _CONTACTS_PROMPT_CONTEXT
+        + "Specified operator: "
+        + operator.name
+        + "\nSpecified operator location: "
+        + (operator.city + (", " if operator.city else "") + operator.country)
+        + "\n\nYou are crawling "
+        + operator.url
+        + "\n\nHyperlink key:\n"
+        + parsed.hyperlink_key_text
+        + "\n\nWebsite HTML:\n"
+        + parsed.parsed_text
+    )
+
+    # openai request
+    try:
+        res = client.responses.create(
+            model="gpt-5-mini",
+            service_tier="flex",
+            input=prompt,
+            # text={"verbosity": "low"},
+            # reasoning={"effort": "low"},
+            # prompt_cache_key="AOIOUSJD98231u89hKAJSHf1982u3JKAHSDAKSHJD1982zxkhfkl",
+        )
+    except Exception:
+        return ClassifyResult(ok=False, message="ChatGPT API error")
+
+    # validate response
+    try:
+        parsed_output = json.loads(res.output_text)
+    except json.JSONDecodeError:
+        return ClassifyResult(ok=False, message="ChatGPT provided invalid JSON")
+
+    if not _validate_llm_contacts_output(parsed_output):
+        return ClassifyResult(ok=False, message="ChatGPT provided invalid JSON schema")
+
+    profiles: list[Profile] = []
+
+    # convert parsed output to list of profiles
+    for p in parsed_output["profiles"]:
+        new_profile = Profile(
+            operator_name=operator.name,
+            operator_country=operator.country,
+            operator_city=operator.city,
+            profile_type=p["profile_type"],
+            role=p["role"],
+            profile_name=p["profile_name"],
+            email=p["email"],
+            phone=p["phone"],
+            whatsapp=p["whatsapp"],
+        )
+
+        profiles.append(new_profile)
+
+    return ClassifyResult(ok=True, profiles=profiles)
