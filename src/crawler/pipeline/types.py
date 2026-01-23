@@ -6,6 +6,18 @@ class OperatorInfo(BaseModel):
     city: str
     url: str
 
+class Profile(BaseModel):
+    operator_name: str
+    operator_country: str | None = None
+    operator_city: str | None = None
+
+    profile_type: str
+    role: str | None = None
+    profile_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    whatsapp: str | None = None
+
 class FetchResult(BaseModel):
     ok: bool
     url: str | None = None
@@ -14,7 +26,6 @@ class FetchResult(BaseModel):
 
 class ParseResult(BaseModel):
     ok: bool
-    url: str | None = None
     hyperlink_key_text: str | None = None
     parsed_text: str | None = None
     emails: list[str] | None = None
@@ -27,5 +38,7 @@ class ClassifyResult(BaseModel):
     category: str | None = None
     sub_category: str | None = None
     booking_method: str | None = None
+    follow_booking: str | None = None
+    follow_contact: str | None = None
+    profiles: list[Profile] | None = None
     message: str | None = None
-    
