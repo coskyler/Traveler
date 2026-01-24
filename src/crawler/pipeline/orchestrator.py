@@ -41,7 +41,7 @@ def run(operator: OperatorInfo) -> ClassifyResult:
     # classify content with LLM
     classification = classify(landing_content.parsed, operator)
     if not classification.ok:
-        return ClassifyResult(ok=False, message=classification.message)
+        return classification
 
     # follow the booking page
     if classification.follow_booking:
@@ -79,7 +79,9 @@ def run(operator: OperatorInfo) -> ClassifyResult:
 
             # update total token usage
             classification.input_tokens += contacts_classification.input_tokens
-            classification.cached_input_tokens += contacts_classification.cached_input_tokens
+            classification.cached_input_tokens += (
+                contacts_classification.cached_input_tokens
+            )
             classification.output_tokens += contacts_classification.output_tokens
         else:
             print(contact_content.message)

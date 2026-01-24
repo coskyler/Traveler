@@ -9,7 +9,7 @@ client = OpenAI()
 
 _PROMPT_CONTEXT = """
 You are crawling a website that is presumed to be a specific private tour/activity/attraction operator's website. Your task is to confirm that it is a real operator's website and that it belongs to the specified operator. If it is not a private operator (e.g., government, public park, non-profit, misc., etc.), or the website does not belong to the specified operator, immediately respond with the appropriate status.
-Otherwise, the status is OK and you will classify the operator. It is imperative that the most accurate business type is selected, followed by the experience type, based on the operator's brand and products. You will then determine the website's booking method (online booking, form submission, or simply contact info), and the operator's scope (local, multiple regions, or multiple countries). If you cannot determine the booking method with high confidence, you will choose 1 hyperlink to follow which likely contains the needed information. You will also choose 1 hyperlink to follow to website's contact page if available; if there is no contact page and contact information is available in the current page, enter the URL of the page you are currently crawling in "follow_contact".
+Otherwise, the status is OK and you will classify the operator. It is imperative that the most accurate business type is selected, followed by the experience type, based on the operator's brand and products. If multiple categories are applicable, you should pick the single category that best and most specifically describes the operator. You will then determine the website's booking method (online booking, form submission, or simply contact info), and the operator's scope (local, multiple regions, or multiple countries). If you cannot determine the booking method with high confidence, you will choose 1 hyperlink to follow which likely contains the needed information. You will also choose 1 hyperlink to follow to website's contact page if available; if there is no contact page and contact information is available in the current page, enter the URL of the page you are currently crawling in "follow_contact".
 
 Respond with a parsable JSON only (no markdowns, no comments) with this exact type:
 {
@@ -41,7 +41,7 @@ Respond with a parsable JSON only (no markdowns, no comments) with this exact ty
     | { operator_type: "Tour"; business_type: "Tour of a specific attraction"; experience_type: "Site Tours"; }
 
     | { operator_type: "Transportation"; business_type: "Transportation"; experience_type: "Bus or Shuttle Transportation" | "Helicopter Transfers" | "Other Ground Transportation" | "Water Transfers"; }
-    );
+    ); // choose the most specific and accurate, regardless of option order
     booking_method: "Online Booking" | "Form Submission" | "Contact Info" | "Cannot Infer" | null; // if multiple options are applicable, choose the firstmost option
     operating_scope: "local" | "multi_regional" | "international" | null; // Most operators are local. You should have a moderately high confidence if assigning multi_regional or international.
     follow_contact: string | null;
@@ -409,31 +409,41 @@ def classify(parsed: ParseResult, operator: OperatorInfo) -> ClassifyResult:
         return ClassifyResult(ok=False, message="ChatGPT API error")
 
     # validate response
-    try:
-        parsed_output = json.loads(res.output_text)
-    except json.JSONDecodeError:
-        return ClassifyResult(ok=False, message="ChatGPT provided invalid JSON")
-
-    if not _validate_llm_output(parsed_output):
-        return ClassifyResult(ok=False, message="ChatGPT provided invalid JSON schema")
-
-    if parsed_output["status"] != "OK":
-        return ClassifyResult(ok=False, message=parsed_output["status"])
-
-    return ClassifyResult(
-        ok=True,
-        operator_type=parsed_output["classification"]["operator_type"],
-        business_type=parsed_output["classification"]["business_type"],
-        experience_type=parsed_output["classification"]["experience_type"],
-        booking_method=parsed_output["booking_method"],
-        operating_scope=parsed_output["operating_scope"],
-        follow_booking=parsed_output["follow_booking"],
-        follow_contact=parsed_output["follow_contact"],
+    classified = ClassifyResult(
+        ok=False,
         input_tokens=res.usage.input_tokens
         - res.usage.input_tokens_details.cached_tokens,
         cached_input_tokens=res.usage.input_tokens_details.cached_tokens,
         output_tokens=res.usage.output_tokens,
     )
+
+    try:
+        parsed_output = json.loads(res.output_text)
+    except json.JSONDecodeError:
+        classified.ok = False
+        classified.message = "ChatGPT provided invalid JSON"
+        return classified
+
+    if not _validate_llm_output(parsed_output):
+        classified.ok = False
+        classified.message = "ChatGPT provided invalid JSON schema"
+        return classified
+
+    if parsed_output["status"] != "OK":
+        classified.ok = False
+        classified.message = parsed_output["status"]
+        return classified
+
+    classified.ok = True
+    classified.operator_type = parsed_output["classification"]["operator_type"]
+    classified.business_type = parsed_output["classification"]["business_type"]
+    classified.experience_type = parsed_output["classification"]["experience_type"]
+    classified.booking_method = parsed_output["booking_method"]
+    classified.operating_scope = parsed_output["operating_scope"]
+    classified.follow_booking = parsed_output["follow_booking"]
+    classified.follow_contact = parsed_output["follow_contact"]
+
+    return classified
 
 
 def classify_booking(parsed: ParseResult, operator: OperatorInfo) -> ClassifyResult:
@@ -465,22 +475,30 @@ def classify_booking(parsed: ParseResult, operator: OperatorInfo) -> ClassifyRes
         return ClassifyResult(ok=False, message="ChatGPT API error")
 
     # validate response
-    try:
-        parsed_output = json.loads(res.output_text)
-    except json.JSONDecodeError:
-        return ClassifyResult(ok=False, message="ChatGPT provided invalid JSON")
-
-    if not _validate_llm_booking_output(parsed_output):
-        return ClassifyResult(ok=False, message="ChatGPT provided invalid JSON schema")
-
-    return ClassifyResult(
-        ok=True,
-        booking_method=parsed_output["booking_method"],
+    classified = ClassifyResult(
+        ok=False,
         input_tokens=res.usage.input_tokens
         - res.usage.input_tokens_details.cached_tokens,
         cached_input_tokens=res.usage.input_tokens_details.cached_tokens,
         output_tokens=res.usage.output_tokens,
     )
+
+    try:
+        parsed_output = json.loads(res.output_text)
+    except json.JSONDecodeError:
+        classified.ok = False
+        classified.message = "ChatGPT provided invalid JSON"
+        return classified
+
+    if not _validate_llm_booking_output(parsed_output):
+        classified.ok = False
+        classified.message = "ChatGPT provided invalid JSON schema"
+        return classified
+
+    classified.ok = True
+    classified.booking_method = parsed_output["booking_method"]
+
+    return classified
 
 
 def classify_contacts(parsed: ParseResult, operator: OperatorInfo) -> ClassifyResult:
@@ -512,13 +530,25 @@ def classify_contacts(parsed: ParseResult, operator: OperatorInfo) -> ClassifyRe
         return ClassifyResult(ok=False, message="ChatGPT API error")
 
     # validate response
+    classified = ClassifyResult(
+        ok=False,
+        input_tokens=res.usage.input_tokens
+        - res.usage.input_tokens_details.cached_tokens,
+        cached_input_tokens=res.usage.input_tokens_details.cached_tokens,
+        output_tokens=res.usage.output_tokens,
+    )
+
     try:
         parsed_output = json.loads(res.output_text)
     except json.JSONDecodeError:
-        return ClassifyResult(ok=False, message="ChatGPT provided invalid JSON")
+        classified.ok = False
+        classified.message = "ChatGPT provided invalid JSON"
+        return classified
 
     if not _validate_llm_contacts_output(parsed_output):
-        return ClassifyResult(ok=False, message="ChatGPT provided invalid JSON schema")
+        classified.ok = False
+        classified.message = "ChatGPT provided invalid JSON schema"
+        return classified
 
     profiles: list[Profile] = []
 
@@ -538,11 +568,7 @@ def classify_contacts(parsed: ParseResult, operator: OperatorInfo) -> ClassifyRe
 
         profiles.append(new_profile)
 
-    return ClassifyResult(
-        ok=True,
-        profiles=profiles,
-        input_tokens=res.usage.input_tokens
-        - res.usage.input_tokens_details.cached_tokens,
-        cached_input_tokens=res.usage.input_tokens_details.cached_tokens,
-        output_tokens=res.usage.output_tokens,
-    )
+    classified.ok = True
+    classified.profiles = profiles
+
+    return classified
