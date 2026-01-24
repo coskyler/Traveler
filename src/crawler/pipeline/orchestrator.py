@@ -43,7 +43,7 @@ def run(operator: OperatorInfo) -> ClassifyResult:
     if not classification.ok:
         return ClassifyResult(ok=False, message=classification.message)
 
-    # navigate website
+    # follow the booking page
     if classification.follow_booking:
         booking_content: GetResult = _get_content(classification.follow_booking)
         if booking_content.ok:
@@ -52,9 +52,17 @@ def run(operator: OperatorInfo) -> ClassifyResult:
                 classification.booking_method = booking_classification.booking_method
             else:
                 print(booking_classification.message)
+
+            # update total token usage
+            classification.input_tokens += booking_classification.input_tokens
+            classification.cached_input_tokens += (
+                booking_classification.cached_input_tokens
+            )
+            classification.output_tokens += booking_classification.output_tokens
         else:
             print(booking_content.message)
 
+    # follow the contacts page
     if classification.follow_contact:
         if classification.follow_contact == operator.url:
             contact_content = landing_content
@@ -68,6 +76,11 @@ def run(operator: OperatorInfo) -> ClassifyResult:
                 classification.profiles = contacts_classification.profiles
             else:
                 print(contacts_classification.message)
+
+            # update total token usage
+            classification.input_tokens += contacts_classification.input_tokens
+            classification.cached_input_tokens += contacts_classification.cached_input_tokens
+            classification.output_tokens += contacts_classification.output_tokens
         else:
             print(contact_content.message)
 

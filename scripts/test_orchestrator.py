@@ -2,10 +2,10 @@ from crawler.pipeline import orchestrator
 from crawler.pipeline.types import OperatorInfo, ClassifyResult
 
 operator = OperatorInfo(
-    name="Tuscany Taste Tour",
+    name="Amigo Tours Rome",
     country="Italy",
-    city="Cecina",
-    url="https://tuscanytastetour.com/"
+    city="Rome",
+    url="https://amigotours.com/",
 )
 
 r: ClassifyResult = orchestrator.run(operator)

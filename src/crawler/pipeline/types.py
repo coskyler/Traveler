@@ -35,10 +35,15 @@ class ParseResult(BaseModel):
 
 class ClassifyResult(BaseModel):
     ok: bool
-    category: str | None = None
-    sub_category: str | None = None
+    operator_type: str | None = None
+    business_type: str | None = None
+    experience_type: str | None = None
     booking_method: str | None = None
+    operating_scope: str | None = None
     follow_booking: str | None = None
     follow_contact: str | None = None
     profiles: list[Profile] | None = None
     message: str | None = None
+    input_tokens: int = 0
+    cached_input_tokens: int = 0
+    output_tokens: int = 0
