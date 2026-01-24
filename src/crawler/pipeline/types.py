@@ -3,8 +3,8 @@ from pydantic import BaseModel
 class OperatorInfo(BaseModel):
     name: str
     country: str
-    city: str
-    url: str
+    city: str = ""
+    url: str = ""
 
 class Profile(BaseModel):
     operator_name: str
@@ -47,3 +47,8 @@ class ClassifyResult(BaseModel):
     input_tokens: int = 0
     cached_input_tokens: int = 0
     output_tokens: int = 0
+
+class SearchResult(BaseModel):
+    ok: bool
+    url: str | None = None
+    message: str | None = None

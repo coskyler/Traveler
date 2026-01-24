@@ -102,5 +102,4 @@ def fetch(url: str) -> FetchResult:
 
         return FetchResult(ok=True, url=str(r.url), text=r.text)
     except httpx.RequestError as e:
-        log.error("Fetch failed: %s", e)
-        return FetchResult(ok=False, message="Httpx error")
+        return FetchResult(ok=False, message="Operator request error")
