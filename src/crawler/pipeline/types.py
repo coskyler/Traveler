@@ -40,6 +40,7 @@ class ClassifyResult(BaseModel):
     experience_type: str | None = None
     booking_method: str | None = None
     operating_scope: str | None = None
+    final_url: str | None = None
     follow_booking: str | None = None
     follow_contact: str | None = None
     profiles: list[Profile] | None = None

@@ -8,8 +8,8 @@ from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, ALL_CO
 from psycopg.rows import dict_row
 import traceback
 
-MAX_CONCURRENT_JOBS = 3
-JOB_LIMIT = 3
+MAX_CONCURRENT_JOBS = 25
+JOB_LIMIT = 97
 START_ROW = 51000
 
 def _insert_result(attraction_id, res: ClassifyResult):
@@ -18,6 +18,7 @@ def _insert_result(attraction_id, res: ClassifyResult):
             """
             INSERT INTO results (
                 attraction_id,
+                final_url,
                 operator_type,
                 business_type,
                 experience_type,
@@ -29,11 +30,12 @@ def _insert_result(attraction_id, res: ClassifyResult):
                 output_tokens,
                 searched
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (attraction_id) DO NOTHING
             """,
             (
                 attraction_id,
+                res.final_url,
                 res.operator_type,
                 res.business_type,
                 res.experience_type,
@@ -87,10 +89,10 @@ def _insert_result(attraction_id, res: ClassifyResult):
 def job(row):
     print(f"Starting {row['operator']}")
     operator = OperatorInfo(
-        name=row["operator"],
-        country=row["country"],
-        city=row["city"],
-        url=row["operator_website"]
+        name=row["operator"] or "",
+        country=row["country"] or "",
+        city=row["city"] or "",
+        url=row["operator_website"] or ""
     )
 
     result: ClassifyResult = orchestrator.run(operator)

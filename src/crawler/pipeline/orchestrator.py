@@ -60,6 +60,7 @@ def run(operator: OperatorInfo) -> ClassifyResult:
     # classify content with LLM
     classification = classify(landing_content.parsed, operator)
     classification.searched = searched
+    classification.final_url = operator.url
     if not classification.ok:
         if (
             classification.message == "Website does not belong to specified operator"
@@ -81,6 +82,7 @@ def run(operator: OperatorInfo) -> ClassifyResult:
                         new_classification.message=f"{classification.message}, {new_classification.message}"
                         return new_classification
                     classification = new_classification
+                    classification.final_url = operator.url
                     classification.searched = searched
                 else:
                     return ClassifyResult(
