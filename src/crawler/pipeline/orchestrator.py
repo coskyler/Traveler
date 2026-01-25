@@ -73,12 +73,13 @@ def run(operator: OperatorInfo) -> ClassifyResult:
                 if landing_content.ok:
                     operator.url = landing_content.followed_url
                     new_classification = classify(landing_content.parsed, operator)
+                    new_classification.searched = searched
+                    new_classification.input_tokens += classification.input_tokens
+                    new_classification.cached_input_tokens += classification.cached_input_tokens
+                    new_classification.output_tokens += classification.output_tokens
                     if not new_classification.ok:
-                        return ClassifyResult(
-                            ok=False,
-                            message=f"{classification.message}, {new_classification.message}",
-                            searched=searched,
-                        )
+                        new_classification.message=f"{classification.message}, {new_classification.message}"
+                        return new_classification
                     classification = new_classification
                     classification.searched = searched
                 else:

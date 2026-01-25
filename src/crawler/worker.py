@@ -1,34 +1,108 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from crawler.db import pool
-from crawler.handler import classify_operator
-import crawler.export as export
+from crawler.pipeline.types import OperatorInfo, ClassifyResult
+from crawler.pipeline import orchestrator
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, ALL_COMPLETED
+from psycopg.rows import dict_row
 import traceback
 
-MAX_CONCURRENT_JOBS = 25
-JOB_LIMIT = 1
-START_ROW = 50000
+MAX_CONCURRENT_JOBS = 3
+JOB_LIMIT = 3
+START_ROW = 51000
 
-export.start()
+def _insert_result(attraction_id, res: ClassifyResult):
+    with pool.connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO results (
+                attraction_id,
+                operator_type,
+                business_type,
+                experience_type,
+                booking_method,
+                operating_scope,
+                message,
+                input_tokens,
+                cached_input_tokens,
+                output_tokens,
+                searched
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (attraction_id) DO NOTHING
+            """,
+            (
+                attraction_id,
+                res.operator_type,
+                res.business_type,
+                res.experience_type,
+                res.booking_method,
+                res.operating_scope,
+                res.message,
+                res.input_tokens,
+                res.cached_input_tokens,
+                res.output_tokens,
+                res.searched,
+            ),
+        )
 
-def job(t):
-    row = list(t[3:])
+        for profile in res.profiles or []:
+            cur.execute(
+                """
+                INSERT INTO profiles (
+                    attraction_id,
+                    profile_type,
+                    role,
+                    profile_name,
+                    email,
+                    phone,
+                    whatsapp
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    attraction_id,
+                    profile.profile_type,
+                    profile.role,
+                    profile.profile_name,
+                    profile.email,
+                    profile.phone,
+                    profile.whatsapp,
+                ),
+            )
 
-    operator_url = row[9]
-    # print(row)
+        cur.execute(
+            """
+            UPDATE jobs
+            SET status = 'succeeded'
+            WHERE attraction_id = %s
+            """,
+            (attraction_id,),
+        )
 
-    category, sub_category, status, input_tokens, cached_tokens, output_tokens = classify_operator(operator_url)
-    row[11] = category
-    row[12] = sub_category
-    row += [status, input_tokens - cached_tokens, cached_tokens, output_tokens]
+        conn.commit()
 
-    export.append_csv(row)
+
+def job(row):
+    print(f"Starting {row['operator']}")
+    operator = OperatorInfo(
+        name=row["operator"],
+        country=row["country"],
+        city=row["city"],
+        url=row["operator_website"]
+    )
+
+    result: ClassifyResult = orchestrator.run(operator)
+    _insert_result(row["attraction_id"], result)
+
+    print(f"Finished {row['operator']}")
 
 with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS) as ex:
     inflight = set()
 
     for _ in range(JOB_LIMIT):
-        with pool.connection() as conn, conn.cursor() as cur:
-            conn.execute("BEGIN")
+        with pool.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
             cur.execute("""
                 WITH job AS (
                     SELECT id
@@ -46,7 +120,7 @@ with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS) as ex:
                 RETURNING jobs.*;
             """, (START_ROW,))
             row = cur.fetchone()
-            conn.execute("COMMIT")
+            conn.commit()
 
         if row is None:
             break
@@ -64,7 +138,7 @@ with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS) as ex:
         if len(inflight) >= MAX_CONCURRENT_JOBS:
             done, inflight = wait(inflight, return_when=FIRST_COMPLETED)
 
-wait(inflight, return_when=ALL_COMPLETED)
+if inflight:
+    wait(inflight, return_when=ALL_COMPLETED)
 
 pool.close()
-export.close_csv()

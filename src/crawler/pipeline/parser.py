@@ -198,7 +198,7 @@ def parse(fetched: FetchResult) -> ParseResult:
 
     _remove_whitespace(lines)
 
-    parsed_text = "\n".join(lines)
+    parsed_text = ("\n".join(lines))[:12000].rstrip()
     hyperlink_key_text = "\n".join(f"[L{v}] {k}" for k, v in links.items())
 
     # create socials dict from links
