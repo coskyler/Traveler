@@ -6,7 +6,41 @@ from rapidfuzz import fuzz
 from unidecode import unidecode
 import tldextract
 import re
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
+from publicsuffix2 import get_sld
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+_AGGREGATOR_DOMAINS = {
+    "wikipedia",
+    "wikivoyage",
+    "tripadvisor",
+    "viator",
+    "getyourguide",
+    "klook",
+    "booking",
+    "airbnb",
+    "expedia",
+    "lonelyplanet",
+    "yelp",
+    "facebook",
+    "instagram",
+    "twitter",
+    "x",
+    "linkedin",
+    "tiktok",
+    "youtube",
+    "youtu",
+    "pinterest",
+    "reddit",
+    "trustpilot",
+    "foursquare",
+    "opentable",
+    "google",
+    "goo",
+}
 
 
 def _norm(s: str) -> str:
@@ -27,6 +61,18 @@ def _score(operator: str, title: str, link: str, search_rank: int = 0) -> float:
     return 0.55 * s_domain + 0.35 * s_title + (10 - search_rank)
 
 
+def _validate_url(link: str) -> bool:
+    p = urlparse(link)
+    host = p.netloc.lower().split(":")[0]
+    sld = get_sld(host)
+    sld_name = sld.split(".", 1)[0]
+
+    if sld_name in _AGGREGATOR_DOMAINS:
+        return False
+
+    return True
+
+
 def search(operator: OperatorInfo) -> SearchResult:
     headers = {
         "Authorization": f"Bearer {os.environ['BRIGHTDATA_SERP_API_KEY']}",
@@ -40,7 +86,10 @@ def search(operator: OperatorInfo) -> SearchResult:
 
     try:
         response = httpx.post(
-            "https://api.brightdata.com/request", json=data, headers=headers
+            "https://api.brightdata.com/request",
+            json=data,
+            headers=headers,
+            timeout=30,
         )
     except httpx.RequestError:
         return SearchResult(ok=False, message="SERP Request Error")
@@ -62,12 +111,17 @@ def search(operator: OperatorInfo) -> SearchResult:
             if not link or not title:
                 continue
 
-            score = _score(operator=operator.name, title=title, link=link, search_rank=i)
+            score = _score(
+                operator=operator.name, title=title, link=link, search_rank=i
+            )
             if score > best_score:
                 best_score = score
                 best = link
 
     except Exception:
         return SearchResult(ok=False, message="SERP provided invalid JSON schema")
+
+    if not _validate_url(best):
+        return SearchResult(ok=False, url=best, message="Found social/aggregator URL")
 
     return SearchResult(ok=True, url=best)

@@ -89,7 +89,7 @@ def fetch(url: str) -> FetchResult:
                 "Upgrade-Insecure-Requests": "1",
             },
             follow_redirects=True,
-            timeout=15,
+            timeout=20,
         )
 
         if not r.is_success:

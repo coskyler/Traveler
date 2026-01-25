@@ -3,7 +3,7 @@ from lxml.html import HtmlElement
 from lxml.etree import ParserError
 from crawler.pipeline.types import FetchResult, ParseResult
 import re
-from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.parse import urljoin, urlparse, urlunparse, urlsplit, urlunsplit
 from publicsuffix2 import get_sld
 
 
@@ -71,7 +71,13 @@ _SOCIAL_ORIGINS = {
     "x"
 }
 
+def _chop_link(url: str) -> str:
+    parts = urlsplit(url)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+
 def _add_link(link: str, links: dict[str, int]) -> int:
+    link = _chop_link(link)
+    
     if link in links:
         return links[link]
 
@@ -105,7 +111,7 @@ def _extract_attrib_info(
         if not u.startswith(("javascript:", "mailto:", "tel:", "#"))
     ]
 
-    return [f"[L{_add_link(link, links)}]" for link in normalized]
+    return [f"[L{_add_link(link, links)}]" for link in normalized if link and len(link) < 256]
 
 
 def _extract_emails(text: str, emails: dict[str, None]) -> None:
@@ -220,6 +226,8 @@ def parse(fetched: FetchResult) -> ParseResult:
         if sld_name in _SOCIAL_ORIGINS:
             socials.setdefault(sld_name, new_link)
 
+    print(f"\n\nparsed chars: {len(parsed_text)}\n\n{parsed_text}\n\nhypertext: {len(hyperlink_key_text)}\n\n{hyperlink_key_text}")
+
     return ParseResult(
         ok=True,
         parsed_text=parsed_text,
@@ -228,3 +236,5 @@ def parse(fetched: FetchResult) -> ParseResult:
         phones=list(phones),
         socials=socials
     )
+
+    
