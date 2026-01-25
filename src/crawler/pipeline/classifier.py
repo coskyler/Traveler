@@ -8,7 +8,7 @@ load_dotenv()
 client = OpenAI()
 
 _PROMPT_CONTEXT = """
-You are crawling a website that is presumed to be a specific private tour/activity/attraction operator's website. Your task is to confirm that it is a real operator's website and that it belongs to the specified operator. If it is not a private operator (e.g., government, public park, non-profit, misc., etc.), or the website does not belong to the specified operator, immediately respond with the appropriate status.
+You are crawling a website that is presumed to be a specific private tour/activity/attraction operator's website. Your task is to confirm that it belongs to the specified operator and that it is a real operator's website. If it is not a private operator (e.g., government, public park, non-profit, misc., etc.), or the website does not belong to the specified operator, immediately respond with the appropriate status.
 Otherwise, the status is OK and you will classify the operator. It is imperative that the most accurate business type is selected, followed by the experience type, based on the operator's brand and products. If multiple categories are applicable, you should pick the single category that best and most specifically describes the operator. You will then determine the website's booking method (online booking, form submission, or simply contact info), and the operator's scope (local, multiple regions, or multiple countries). If you cannot determine the booking method with high confidence, you will choose 1 hyperlink to follow which likely contains the needed information. You will also choose 1 hyperlink to follow to website's contact page if available; if there is no contact page and contact information is available in the current page, enter the URL of the page you are currently crawling in "follow_contact".
 
 Respond with a parsable JSON only (no markdowns, no comments) with this exact type:
@@ -63,6 +63,7 @@ Respond with a parsable JSON only (no markdowns, no comments) with this exact ty
 _CONTACTS_PROMPT_CONTEXT = """
 You are crawling the contacts page of a tour operator's website. You will return a list of profiles as complete as possible given the information. If no information is available, profiles should be an empty list.
 A profile should only be added if it contains at least one method of contact. Do not add multiple profiles with the same contact information. Do not assume a phone number is a whatsapp number unless stated by the website.
+Email, phone, and whatsapp fields MUST contain a single value only. If multiple values are present, create multiple profiles.
 
 Respond with a parsable JSON only (no markdowns, no comments) with this exact type:
 {

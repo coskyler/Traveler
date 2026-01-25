@@ -1,11 +1,13 @@
 from crawler.pipeline.fetcher import fetch
 from crawler.pipeline.parser import parse
 from crawler.pipeline.classifier import classify, classify_booking, classify_contacts
+from crawler.pipeline.searcher import search
 from crawler.pipeline.types import (
     OperatorInfo,
     FetchResult,
     ParseResult,
     ClassifyResult,
+    SearchResult,
 )
 from pydantic import BaseModel
 
@@ -30,18 +32,69 @@ def _get_content(url: str) -> GetResult:
 
 
 def run(operator: OperatorInfo) -> ClassifyResult:
+    searched = False
+
     # fetch and parse the URL
     landing_content: GetResult = _get_content(operator.url)
     if not landing_content.ok:
-        return ClassifyResult(ok=False, message=landing_content.message)
+        # if provided URL fails, attempt to find the operator's website with google SERP
+        url_search: SearchResult = search(operator)
+        searched = True
+        if url_search.ok:
+            landing_content: GetResult = _get_content(url_search.url)
+            if not landing_content.ok:
+                return ClassifyResult(
+                    ok=False, message=landing_content.message, searched=searched
+                )
+
+        else:
+            return ClassifyResult(
+                ok=False,
+                message=f"{landing_content.message}, {url_search.message}",
+                searched=searched,
+            )
 
     # update operator URL to followed URL
     operator.url = landing_content.followed_url
 
     # classify content with LLM
     classification = classify(landing_content.parsed, operator)
+    classification.searched = searched
     if not classification.ok:
-        return classification
+        if (
+            classification.message == "Website does not belong to specified operator"
+            and not searched
+        ):
+            # if provided URL fails, attempt to find the operator's website with google SERP
+            url_search: SearchResult = search(operator)
+            searched = True
+            if url_search.ok:
+                landing_content: GetResult = _get_content(url_search.url)
+                if landing_content.ok:
+                    operator.url = landing_content.followed_url
+                    new_classification = classify(landing_content.parsed, operator)
+                    if not new_classification.ok:
+                        return ClassifyResult(
+                            ok=False,
+                            message=f"{classification.message}, {new_classification.message}",
+                            searched=searched,
+                        )
+                    classification = new_classification
+                    classification.searched = searched
+                else:
+                    return ClassifyResult(
+                        ok=False,
+                        message=f"{classification.message}, {landing_content.message}",
+                        searched=searched,
+                    )
+            else:
+                return ClassifyResult(
+                    ok=False,
+                    message=f"{classification.message}, {url_search.message}",
+                    searched=searched,
+                )
+        else:
+            return classification
 
     # follow the booking page
     if classification.follow_booking:

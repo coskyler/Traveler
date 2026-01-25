@@ -226,7 +226,7 @@ def parse(fetched: FetchResult) -> ParseResult:
         if sld_name in _SOCIAL_ORIGINS:
             socials.setdefault(sld_name, new_link)
 
-    print(f"\n\nparsed chars: {len(parsed_text)}\n\n{parsed_text}\n\nhypertext: {len(hyperlink_key_text)}\n\n{hyperlink_key_text}")
+    # print(f"\n\nparsed chars: {len(parsed_text)}\n\n{parsed_text}\n\nhypertext: {len(hyperlink_key_text)}\n\n{hyperlink_key_text}")
 
     return ParseResult(
         ok=True,

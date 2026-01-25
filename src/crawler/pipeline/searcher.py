@@ -9,10 +9,6 @@ import re
 from urllib.parse import quote_plus, urlparse
 from publicsuffix2 import get_sld
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 _AGGREGATOR_DOMAINS = {
     "wikipedia",
     "wikivoyage",
