@@ -48,6 +48,7 @@ CREATE INDEX url_idx ON jobs(operator_website) WHERE status!='queued';
 CREATE TABLE results (
     attraction_id BIGINT PRIMARY KEY REFERENCES jobs(attraction_id),
 
+    final_url            TEXT,
     operator_type        TEXT,
     business_type        TEXT,
     experience_type      TEXT,
