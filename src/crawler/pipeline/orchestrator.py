@@ -33,6 +33,8 @@ def _get_content(url: str) -> GetResult:
 
 def run(operator: OperatorInfo) -> ClassifyResult:
     searched = False
+    original_url = operator.url
+    found_url = None
 
     # fetch and parse the URL
     landing_content: GetResult = _get_content(operator.url)
@@ -40,11 +42,12 @@ def run(operator: OperatorInfo) -> ClassifyResult:
         # if provided URL fails, attempt to find the operator's website with google SERP
         url_search: SearchResult = search(operator)
         searched = True
+        found_url = url_search.url
         if url_search.ok:
             landing_content: GetResult = _get_content(url_search.url)
             if not landing_content.ok:
                 return ClassifyResult(
-                    ok=False, message=landing_content.message, searched=searched
+                    ok=False, message=landing_content.message, searched=searched, final_url=original_url
                 )
 
         else:
@@ -52,6 +55,7 @@ def run(operator: OperatorInfo) -> ClassifyResult:
                 ok=False,
                 message=f"{landing_content.message}, {url_search.message}",
                 searched=searched,
+                final_url=original_url
             )
 
     # update operator URL to followed URL
@@ -60,15 +64,15 @@ def run(operator: OperatorInfo) -> ClassifyResult:
     # classify content with LLM
     classification = classify(landing_content.parsed, operator)
     classification.searched = searched
-    classification.final_url = operator.url
     if not classification.ok:
         if (
-            classification.message == "Website does not belong to specified operator"
+            classification.message == "Webpage is not about the operator"
             and not searched
         ):
             # if provided URL fails, attempt to find the operator's website with google SERP
             url_search: SearchResult = search(operator)
             searched = True
+            found_url = url_search.url
             if url_search.ok:
                 landing_content: GetResult = _get_content(url_search.url)
                 if landing_content.ok:
@@ -80,24 +84,29 @@ def run(operator: OperatorInfo) -> ClassifyResult:
                     new_classification.output_tokens += classification.output_tokens
                     if not new_classification.ok:
                         new_classification.message=f"{classification.message}, {new_classification.message}"
+                        new_classification.final_url = original_url
                         return new_classification
                     classification = new_classification
-                    classification.final_url = operator.url
                     classification.searched = searched
                 else:
                     return ClassifyResult(
                         ok=False,
                         message=f"{classification.message}, {landing_content.message}",
                         searched=searched,
+                        final_url=original_url
                     )
             else:
                 return ClassifyResult(
                     ok=False,
                     message=f"{classification.message}, {url_search.message}",
                     searched=searched,
+                    final_url=original_url
                 )
         else:
+            classification.final_url = original_url
             return classification
+        
+    classification.final_url = found_url or original_url
 
     # follow the booking page
     if classification.follow_booking:

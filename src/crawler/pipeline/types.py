@@ -38,6 +38,7 @@ class ClassifyResult(BaseModel):
     operator_type: str | None = None
     business_type: str | None = None
     experience_type: str | None = None
+    is_commercial: bool | None = None
     booking_method: str | None = None
     operating_scope: str | None = None
     final_url: str | None = None

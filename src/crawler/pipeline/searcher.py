@@ -80,14 +80,20 @@ def search(operator: OperatorInfo) -> SearchResult:
         "format": "raw",
     }
 
-    try:
-        response = httpx.post(
-            "https://api.brightdata.com/request",
-            json=data,
-            headers=headers,
-            timeout=30,
-        )
-    except httpx.RequestError:
+    # three attempts
+    for _ in range(3):
+        try:
+            response = httpx.post(
+                "https://api.brightdata.com/request",
+                json=data,
+                headers=headers,
+                timeout=30,
+            )
+            break
+        except httpx.RequestError:
+            response = None
+
+    if response is None:
         return SearchResult(ok=False, message="SERP Request Error")
 
     try:
