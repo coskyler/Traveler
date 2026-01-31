@@ -27,17 +27,17 @@ query = """
 """
 
 with open(
-    Path("outputs") / f"Before{datetime.now():%Y%m%d_%H%M%S}.csv",
+    Path("outputs") / f"{datetime.now():%Y%m%d_%H%M%S}_Before.csv",
     "w",
     newline="",
     encoding="utf-8-sig",
 ) as unmodified_file, open(
-    Path("outputs") / f"After{datetime.now():%Y%m%d_%H%M%S}.csv",
+    Path("outputs") / f"{datetime.now():%Y%m%d_%H%M%S}_After.csv",
     "w",
     newline="",
     encoding="utf-8-sig",
 ) as modified_file, open(
-    Path("outputs") / f"Profiles{datetime.now():%Y%m%d_%H%M%S}.csv",
+    Path("outputs") / f"{datetime.now():%Y%m%d_%H%M%S}_Profiles.csv",
     "w",
     newline="",
     encoding="utf-8-sig",
@@ -92,6 +92,7 @@ with open(
             "Operator Type",
             "Business Type",
             "Experience Type",
+            "Commercial Operator",
             "Average Rating",
             "Review Count",
             "Number of Products",
@@ -159,6 +160,7 @@ with open(
                     r["operator_type"],
                     r["business_type"],
                     r["experience_type"],
+                    r["is_commercial"],
                     r["avg_rating"],
                     r["review_count"],
                     r["number_of_products"],

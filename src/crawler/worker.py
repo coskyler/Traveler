@@ -9,7 +9,7 @@ from psycopg.rows import dict_row
 import traceback
 
 MAX_CONCURRENT_JOBS = 25
-JOB_LIMIT = 97
+JOB_LIMIT = 100
 START_ROW = 51000
 
 def _insert_result(attraction_id, res: ClassifyResult):
@@ -22,6 +22,7 @@ def _insert_result(attraction_id, res: ClassifyResult):
                 operator_type,
                 business_type,
                 experience_type,
+                is_commercial,
                 booking_method,
                 operating_scope,
                 message,
@@ -30,7 +31,7 @@ def _insert_result(attraction_id, res: ClassifyResult):
                 output_tokens,
                 searched
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (attraction_id) DO NOTHING
             """,
             (
@@ -39,6 +40,7 @@ def _insert_result(attraction_id, res: ClassifyResult):
                 res.operator_type,
                 res.business_type,
                 res.experience_type,
+                res.is_commercial,
                 res.booking_method,
                 res.operating_scope,
                 res.message,

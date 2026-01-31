@@ -52,6 +52,7 @@ CREATE TABLE results (
     operator_type        TEXT,
     business_type        TEXT,
     experience_type      TEXT,
+    is_commercial        BOOLEAN,
     booking_method       TEXT,
     operating_scope      TEXT,
     message              TEXT,
