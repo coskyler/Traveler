@@ -8,44 +8,29 @@ load_dotenv()
 client = OpenAI()
 
 _PROMPT_CONTEXT = """
-You are crawling a website that is presumed to be a specific private tour/activity/attraction operator's website. Your task is to confirm that it belongs to the specified operator and that it is a real operator's website. If it is not a private operator (e.g., government, public park, non-profit, misc., etc.), or the website does not belong to the specified operator, immediately respond with the appropriate status.
-Otherwise, the status is OK and you will classify the operator. It is imperative that the most accurate business type is selected, followed by the experience type, based on the operator's brand and products. If multiple categories are applicable, you should pick the single category that best and most specifically describes the operator. You will then determine the website's booking method (online booking, form submission, or simply contact info), and the operator's scope (local, multiple regions, or multiple countries). If you cannot determine the booking method with high confidence, you will choose 1 hyperlink to follow which likely contains the needed information. You will also choose 1 hyperlink to follow to website's contact page if available; if there is no contact page and contact information is available in the current page, enter the URL of the page you are currently crawling in "follow_contact".
+You are crawling a webpage that is presumably about an experience. You will respond with JSON where each field indicates the cooresponding characteristic about the experience operator. Complete each field in order, following the instructions in the cooresponding comment.
 
 Respond with a parsable JSON only (no markdowns, no comments) with this exact type:
 {
-    status: "OK" | "Website does not belong to specified operator" | "Not an operator website" | "Insufficient information: website likely requires JavaScript rendering" | `Other error: ${string}`; // if multiple options are applicable, choose the firstmost option
-    classification: null | (
-    | { operator_type: "Activity"; business_type: "Air-based adventure, activity, or rentals"; experience_type: "Parasailing & Paragliding" | "Skydiving"; }
-    | { operator_type: "Activity"; business_type: "Cultural activity, experience or classes"; experience_type: "Arts & Crafts" | "Education / Cultural"; }
-    | { operator_type: "Activity"; business_type: "Land-based adventure, activity, or rentals"; experience_type: "Ax Throwing" | "Bike and E-Bike Rentals" | "Bungee Jumping" | "Camel Rides" | "Caving & Climbing" | "Escape Room Games" | "Extreme Sports" | "Fitness Classes" | "Flight Simulator" | "Gear Rentals" | "Hiking" | "Horseback Riding" | "Martial Arts Classes" | "Off-Road & ATV" | "Games & Entertainment Centers" | "Other Outdoor Activities" | "Race Track Car Racing (self-drive)" | "Shooting Ranges" | "Shore Excursions" | "Sports Lessons" | "Swordsmanship Classes" | "Tennis" | "Trams" | "Winter Sports" | "Zipline & Aerial Adventure Parks" | "Zorbing"; }
-    | { operator_type: "Activity"; business_type: "Water-based adventure, activity, or rentals"; experience_type: "Boat Rentals" | "Fishing Charters" | "Marinas" | "River Rafting, Kayaking, Canoeing" | "Scuba & Snorkeling" | "Swim with Dolphins" | "Water Sports"; }
-    | { operator_type: "Activity"; business_type: "Wellness"; experience_type: "Spas" | "Thermal & Mineral Springs" | "Yoga & Pilates"; }
+  ok: boolean; // is the webpage valid and contains at least some information (not an error/shell page)?
+  is_experience: boolean; // is the webpage broadly about some experience?
+  belongs_to_specified_operator: boolean; // is the webpage about or related to the specified operator? It most likely is. Enter true unless you are very confident it is false.
+  // If any of the first three fields are false, fail fast and return null for the rest.
+  
+  classification:
+    | null
+    | { operator_type: "Activity"; business_type: "Air-based adventure, activity, or rentals" | "Cultural activity, experience or classes" | "Land-based adventure, activity, or rentals" | "Water-based adventure, activity, or rentals" | "Wellness" }
+    | { operator_type: "Attraction"; business_type: "Amusement & Theme Parks" | "Cultural Sites & Landmarks" | "Museums & Galleries" | "Natural Attraction" | "Observation Decks & Towers" | "Zoos & Aquariums" }
+    | { operator_type: "Event"; business_type: "Festivals" | "Performing arts" | "Sporting event" }
+    | { operator_type: "Tour"; business_type: "Active / adventure" | "Boat Tours" | "Cultural & Specialty Tours" | "Food & Drink" | "Multi-day Tours" | "Sightseeing" | "Tour of a specific attraction" }
+    | { operator_type: "Transportation"; business_type: "Transportation" };
+    // it is imperative to select the most accurate and specific operator_type and business_type based on the dominating feature of the experience. For example, the dominating feature of a bike sightseeing tour is likely biking (Active / Adventure), but the dominating feature of a walking sightseeing tour is sightseeing.
 
-    | { operator_type: "Attraction"; business_type: "Amusement & Theme Parks"; experience_type: "Adventure Parks" | "Amusement & Theme Parks" | "Amusement Parks" | "Ghost Towns" | "Water Parks"; }
-    | { operator_type: "Attraction"; business_type: "Cultural Sites & Landmarks"; experience_type: "Architectural Landmark" | "Battlefields" | "Lighthouses" | "Monuments & Statues" | "Other sites & landmarks"; }
-    | { operator_type: "Attraction"; business_type: "Museums & Galleries"; experience_type: "Art Galleries" | "Art Museums" | "Children's Museums" | "History & Culture Museums" | "Natural History Museums" | "Science Museums" | "Specialty Museums"; }
-    | { operator_type: "Attraction"; business_type: "Natural Attraction"; experience_type: "Gardens" | "Caverns & Caves" | "Hot Springs & Geysers" | "National & State Parks" | "Other Natural Attractions" | "Waterfalls"; }
-    | { operator_type: "Attraction"; business_type: "Observation Decks & Towers"; experience_type: "Observation Decks & Towers"; }
-    | { operator_type: "Attraction"; business_type: "Zoos & Aquariums"; experience_type: "Aquariums" | "Zoo & Aquariums" | "Zoos"; }
-
-    | { operator_type: "Event"; business_type: "Festivals"; experience_type: "Cultural Events" | "Food & Drink Festivals" | "Music Festivals"; }
-    | { operator_type: "Event"; business_type: "Performing arts"; experience_type: "Concerts & Shows" | "Cultural Events" | "Dinner Theaters" | "Experience nights" | "Theater, play or musical"; }
-    | { operator_type: "Event"; business_type: "Sporting event"; experience_type: "Sporting Events"; }
-
-    | { operator_type: "Tour"; business_type: "Active / adventure"; experience_type: "Adrenaline & Extreme Tours" | "Adventure Tours" | "ATV & Off-Road Tours" | "Bike Tours" | "Canyoning & Rappelling Tours" | "Climbing Tours" | "Eco Tours" | "Hiking & Camping Tours" | "Horseback Riding Tours" | "Motorcycle, Scooter & Moped Tours" | "Nature & Wildlife Tours" | "Running Tours" | "Safaris" | "Self-guided Tours" | "Ski & Snow Tours" | "Wildlife Tours"; }
-    | { operator_type: "Tour"; business_type: "Boat Tours"; experience_type: "Boat Tours" | "Dolphin & Whale Watching"; }
-    | { operator_type: "Tour"; business_type: "Cultural & Specialty Tours"; experience_type: "Art & Music Tours" | "Cultural Tours" | "Ghost & Vampire Tours" | "Historical & Heritage Tours" | "Movie & TV Tours" | "Night Tours" | "Shopping Tours" | "Private Tours" | "Self-guided Tours" | "Tours"; }
-    | { operator_type: "Tour"; business_type: "Food & Drink"; experience_type: "Beer Tastings & Tours" | "Coffee & Tea Tours" | "Cooking Classes" | "Distillery or Spirit Tours" | "Food Tours" | "Wine Tours & Tastings"; }
-    | { operator_type: "Tour"; business_type: "Multi-day Tours"; experience_type: "Multi-day Tours"; }
-    | { operator_type: "Tour"; business_type: "Sightseeing"; experience_type: "Air Tours" | "Balloon Rides" | "Bus Tours" | "Cable Car Tours" | "Car Tours" | "City Tours" | "Classic Car Tours" | "Day tours & Excursions" | "Hop-On Hop-Off Tours" | "Horse-Drawn Carriage Tours" | "Luxury Car Tours" | "Private Tours" | "Rail Tours" | "Sidecar Tours" | "Sightseeing Tours" | "Sightseeing Passes" | "Sports Complexes" | "Vespa, Scooter & Moped Tours" | "Walking Tours" | "Other Tours"; }
-    | { operator_type: "Tour"; business_type: "Tour of a specific attraction"; experience_type: "Site Tours"; }
-
-    | { operator_type: "Transportation"; business_type: "Transportation"; experience_type: "Bus or Shuttle Transportation" | "Helicopter Transfers" | "Other Ground Transportation" | "Water Transfers"; }
-    ); // choose the most specific and accurate, regardless of option order
-    booking_method: "Online Booking" | "Form Submission" | "Contact Info" | "Cannot Infer" | null; // if multiple options are applicable, choose the firstmost option
-    operating_scope: "local" | "multi_regional" | "international" | null; // Most operators are local. You should have a moderately high confidence if assigning multi_regional or international.
-    follow_contact: string | null;
-    follow_booking: string | null;
+  is_commercial_operator: boolean | null; // does the operator provide a commercial experience (do they likely offer some experience-related product such as tickets, tours, rentals, etc)?
+  booking_method: "Online Booking" | "Form Submission" | "Contact Info" | "Cannot Infer" | null; // If you are not confident, put "Cannot Infer" and put one hyperlink (in the follow_booking field) to goto to a page that will contain the booking method.
+  operating_scope: "local" | "multi_regional" | "international" | null; // Does the operator offer experiences in one destination (local), more than one destination within a country (multi_regional), or more than one country (international)?
+  follow_contact: string | null; // If the website is owned by the specified operator, choose one hyperlink to follow to the website's contact page. If none, enter the current URL if it contains contact info.
+  follow_booking: string | null;
 }
 
 """
@@ -61,16 +46,21 @@ Respond with a parsable JSON only (no markdowns, no comments) with this exact ty
 """
 
 _CONTACTS_PROMPT_CONTEXT = """
-You are crawling the contacts page of a tour operator's website. You will return a list of profiles as complete as possible given the information. If no information is available, profiles should be an empty list.
-A profile should only be added if it contains at least one method of contact. Do not add multiple profiles with the same contact information. Do not assume a phone number is a whatsapp number unless stated by the website.
-Email, phone, and whatsapp fields MUST contain a single value only. If multiple values are present, create multiple profiles.
+You are crawling a tour operator’s contacts page. Return a list of contact profiles.
+
+If no contact information exists, return an empty list.
+Only create a profile if it contains at least one contact method.
+No contact method may appear in more than one profile.
+Each email, phone, or WhatsApp field must contain exactly one value. If multiple emails, phones, or WhatsApp numbers are present, create separate profiles.
+If more individuals are listed than contact methods, associate each contact with the most relevant individual.
+Do not assume a phone number is WhatsApp unless the website states it.
 
 Respond with a parsable JSON only (no markdowns, no comments) with this exact type:
 {
   profiles: {
-    profile_type: "Company" | "Individual"; // assume "Company" unless specified
+    profile_type: "Company" | "Individual"; // assume "Company" unless a person's name is specified
     role: "Owner" | "Manager" | "Guide" | "Booking Agent" | "Support" | "Unknown" | null; // null if profile_type is "Company"
-    profile_name: string | null; // Name of the individual or null
+    profile_name: string | null; // null if profile_type is "Company." must be a person's name, otherwise null
     email: string | null;
     phone: string | null;
     whatsapp: string | null;
@@ -85,8 +75,11 @@ def _validate_llm_output(res: dict) -> bool:
         return False
 
     REQUIRED_KEYS = {
-        "status",
+        "ok",
+        "is_experience",
+        "belongs_to_specified_operator",
         "classification",
+        "is_commercial_operator",
         "booking_method",
         "operating_scope",
         "follow_contact",
@@ -95,221 +88,113 @@ def _validate_llm_output(res: dict) -> bool:
     if set(res.keys()) != REQUIRED_KEYS:
         return False
 
-    STATUS_FIXED = {
-        "OK",
-        "Website does not belong to specified operator",
-        "Not an operator website",
-        "Insufficient information: website likely requires JavaScript rendering",
-    }
-    BOOKING = {"Online Booking", "Form Submission", "Contact Info", "Cannot Infer"}
-    OPERATING_SCOPE = {"local", "multi_regional", "international"}
+    def _is_bool(v) -> bool:
+        return isinstance(v, bool)
 
-    CLASSIFICATION_RULES: dict[tuple[str, str], set[str]] = {
-        ("Activity", "Air-based adventure, activity, or rentals"): {
-            "Parasailing & Paragliding",
-            "Skydiving",
-        },
-        ("Activity", "Cultural activity, experience or classes"): {
-            "Arts & Crafts",
-            "Education / Cultural",
-        },
-        ("Activity", "Land-based adventure, activity, or rentals"): {
-            "Ax Throwing",
-            "Bike and E-Bike Rentals",
-            "Bungee Jumping",
-            "Camel Rides",
-            "Caving & Climbing",
-            "Escape Room Games",
-            "Extreme Sports",
-            "Fitness Classes",
-            "Flight Simulator",
-            "Gear Rentals",
-            "Hiking",
-            "Horseback Riding",
-            "Martial Arts Classes",
-            "Off-Road & ATV",
-            "Games & Entertainment Centers",
-            "Other Outdoor Activities",
-            "Race Track Car Racing (self-drive)",
-            "Shooting Ranges",
-            "Shore Excursions",
-            "Sports Lessons",
-            "Swordsmanship Classes",
-            "Tennis",
-            "Trams",
-            "Winter Sports",
-            "Zipline & Aerial Adventure Parks",
-            "Zorbing",
-        },
-        ("Activity", "Water-based adventure, activity, or rentals"): {
-            "Boat Rentals",
-            "Fishing Charters",
-            "Marinas",
-            "River Rafting, Kayaking, Canoeing",
-            "Scuba & Snorkeling",
-            "Swim with Dolphins",
-            "Water Sports",
-        },
-        ("Activity", "Wellness"): {
-            "Spas",
-            "Thermal & Mineral Springs",
-            "Yoga & Pilates",
-        },
-        ("Attraction", "Amusement & Theme Parks"): {
-            "Adventure Parks",
-            "Amusement & Theme Parks",
-            "Amusement Parks",
-            "Ghost Towns",
-            "Water Parks",
-        },
-        ("Attraction", "Cultural Sites & Landmarks"): {
-            "Architectural Landmark",
-            "Battlefields",
-            "Lighthouses",
-            "Monuments & Statues",
-            "Other sites & landmarks",
-        },
-        ("Attraction", "Museums & Galleries"): {
-            "Art Galleries",
-            "Art Museums",
-            "Children's Museums",
-            "History & Culture Museums",
-            "Natural History Museums",
-            "Science Museums",
-            "Specialty Museums",
-        },
-        ("Attraction", "Natural Attraction"): {
-            "Gardens",
-            "Caverns & Caves",
-            "Hot Springs & Geysers",
-            "National & State Parks",
-            "Other Natural Attractions",
-            "Waterfalls",
-        },
-        ("Attraction", "Observation Decks & Towers"): {"Observation Decks & Towers"},
-        ("Attraction", "Zoos & Aquariums"): {"Aquariums", "Zoo & Aquariums", "Zoos"},
-        ("Event", "Festivals"): {
-            "Cultural Events",
-            "Food & Drink Festivals",
-            "Music Festivals",
-        },
-        ("Event", "Performing arts"): {
-            "Concerts & Shows",
-            "Cultural Events",
-            "Dinner Theaters",
-            "Experience nights",
-            "Theater, play or musical",
-        },
-        ("Event", "Sporting event"): {"Sporting Events"},
-        ("Tour", "Active / adventure"): {
-            "Adrenaline & Extreme Tours",
-            "Adventure Tours",
-            "ATV & Off-Road Tours",
-            "Bike Tours",
-            "Canyoning & Rappelling Tours",
-            "Climbing Tours",
-            "Eco Tours",
-            "Hiking & Camping Tours",
-            "Horseback Riding Tours",
-            "Motorcycle, Scooter & Moped Tours",
-            "Nature & Wildlife Tours",
-            "Running Tours",
-            "Safaris",
-            "Self-guided Tours",
-            "Ski & Snow Tours",
-            "Wildlife Tours",
-        },
-        ("Tour", "Boat Tours"): {"Boat Tours", "Dolphin & Whale Watching"},
-        ("Tour", "Cultural & Specialty Tours"): {
-            "Art & Music Tours",
-            "Cultural Tours",
-            "Ghost & Vampire Tours",
-            "Historical & Heritage Tours",
-            "Movie & TV Tours",
-            "Night Tours",
-            "Shopping Tours",
-            "Private Tours",
-            "Self-guided Tours",
-            "Tours",
-        },
-        ("Tour", "Food & Drink"): {
-            "Beer Tastings & Tours",
-            "Coffee & Tea Tours",
-            "Cooking Classes",
-            "Distillery or Spirit Tours",
-            "Food Tours",
-            "Wine Tours & Tastings",
-        },
-        ("Tour", "Multi-day Tours"): {"Multi-day Tours"},
-        ("Tour", "Sightseeing"): {
-            "Air Tours",
-            "Balloon Rides",
-            "Bus Tours",
-            "Cable Car Tours",
-            "Car Tours",
-            "City Tours",
-            "Classic Car Tours",
-            "Day tours & Excursions",
-            "Hop-On Hop-Off Tours",
-            "Horse-Drawn Carriage Tours",
-            "Luxury Car Tours",
-            "Private Tours",
-            "Rail Tours",
-            "Sidecar Tours",
-            "Sightseeing Tours",
-            "Sightseeing Passes",
-            "Sports Complexes",
-            "Vespa, Scooter & Moped Tours",
-            "Walking Tours",
-            "Other Tours",
-        },
-        ("Tour", "Tour of a specific attraction"): {"Site Tours"},
-        ("Transportation", "Transportation"): {
-            "Bus or Shuttle Transportation",
-            "Helicopter Transfers",
-            "Other Ground Transportation",
-            "Water Transfers",
-        },
-    }
+    def _nonempty_str(v) -> bool:
+        return isinstance(v, str) and bool(v.strip())
 
     def _nonempty_str_or_none(v) -> bool:
-        return v is None or (isinstance(v, str) and v.strip())
+        return v is None or _nonempty_str(v)
 
-    # status
-    status = res["status"]
-    if not isinstance(status, str):
+    # --- base booleans ---
+    if not _is_bool(res["ok"]):
         return False
-    if status not in STATUS_FIXED:
-        if not status.startswith("Other error: ") or len(status) <= len(
-            "Other error: "
-        ):
-            return False
+    if not _is_bool(res["is_experience"]):
+        return False
+    if not _is_bool(res["belongs_to_specified_operator"]):
+        return False
+    ico = res["is_commercial_operator"]
+    if ico is not None and not isinstance(ico, bool):
+        return False
 
-    # classification
+
+    # --- classification ---
+    CLASSIFICATION_BY_OPERATOR: dict[str, set[str]] = {
+        "Activity": {
+            "Air-based adventure, activity, or rentals",
+            "Cultural activity, experience or classes",
+            "Land-based adventure, activity, or rentals",
+            "Water-based adventure, activity, or rentals",
+            "Wellness",
+        },
+        "Attraction": {
+            "Amusement & Theme Parks",
+            "Cultural Sites & Landmarks",
+            "Museums & Galleries",
+            "Natural Attraction",
+            "Observation Decks & Towers",
+            "Zoos & Aquariums",
+        },
+        "Event": {
+            "Festivals",
+            "Performing arts",
+            "Sporting event",
+        },
+        "Tour": {
+            "Active / adventure",
+            "Boat Tours",
+            "Cultural & Specialty Tours",
+            "Food & Drink",
+            "Multi-day Tours",
+            "Sightseeing",
+            "Tour of a specific attraction",
+        },
+        "Transportation": {"Transportation"},
+    }
+
     classification = res["classification"]
     if classification is not None:
-        if not isinstance(classification, dict) or set(classification) != {
-            "operator_type",
-            "business_type",
-            "experience_type",
-        }:
+        if not isinstance(classification, dict):
+            return False
+        if set(classification.keys()) != {"operator_type", "business_type"}:
             return False
 
-        key = (classification["operator_type"], classification["business_type"])
-        allowed = CLASSIFICATION_RULES.get(key)
-        if allowed is None or classification["experience_type"] not in allowed:
+        ot = classification.get("operator_type")
+        bt = classification.get("business_type")
+        if not isinstance(ot, str) or not isinstance(bt, str):
             return False
 
-    # booking_method
+        allowed_bts = CLASSIFICATION_BY_OPERATOR.get(ot)
+        if allowed_bts is None or bt not in allowed_bts:
+            return False
+
+    # --- fail-fast rule: if any of the first three are false, rest must be null ---
+    if (
+        (res["ok"] is False)
+        or (res["is_experience"] is False)
+        or (res["belongs_to_specified_operator"] is False)
+    ):
+        if classification is not None:
+            return False
+        if res["booking_method"] is not None:
+            return False
+        if res["operating_scope"] is not None:
+            return False
+        if res["follow_contact"] is not None:
+            return False
+        if res["follow_booking"] is not None:
+            return False
+        # is_commercial_operator is still required (and already validated as bool)
+        return True
+
+    # --- booking_method ---
+    BOOKING = {"Online Booking", "Form Submission", "Contact Info", "Cannot Infer"}
     bm = res["booking_method"]
     if bm is not None and bm not in BOOKING:
         return False
 
-    # operating_scope
+    # If bm == "Cannot Infer", follow_booking must be a non-empty string
+    if bm == "Cannot Infer" and not _nonempty_str(res["follow_booking"]):
+        return False
+
+    # --- operating_scope ---
+    OPERATING_SCOPE = {"local", "multi_regional", "international"}
     scope = res["operating_scope"]
     if scope is not None and scope not in OPERATING_SCOPE:
         return False
 
+    # --- follow links ---
     if not _nonempty_str_or_none(res["follow_contact"]):
         return False
     if not _nonempty_str_or_none(res["follow_booking"]):
@@ -392,7 +277,7 @@ def classify(parsed: ParseResult, operator: OperatorInfo) -> ClassifyResult:
         + operator.url
         + "\n\nHyperlink key:\n"
         + parsed.hyperlink_key_text
-        + "\n\nWebsite HTML:\n"
+        + "\n\nParsed webpage HTML:\n"
         + parsed.parsed_text
     )
 
@@ -424,21 +309,31 @@ def classify(parsed: ParseResult, operator: OperatorInfo) -> ClassifyResult:
         classified.ok = False
         classified.message = "ChatGPT provided invalid JSON"
         return classified
+    
+    print(json.dumps(parsed_output, indent=2))
 
     if not _validate_llm_output(parsed_output):
         classified.ok = False
         classified.message = "ChatGPT provided invalid JSON schema"
         return classified
 
-    if parsed_output["status"] != "OK":
+    if not parsed_output["ok"]:
         classified.ok = False
-        classified.message = parsed_output["status"]
+        classified.message = "LLM identified webpage error"
+        return classified
+    elif not parsed_output["belongs_to_specified_operator"]:
+        classified.ok = False
+        classified.message = "Webpage is not about the operator"
+        return classified
+    elif not parsed_output["is_experience"]:
+        classified.ok = False
+        classified.message = "Webpage is not an experience"
         return classified
 
     classified.ok = True
     classified.operator_type = parsed_output["classification"]["operator_type"]
     classified.business_type = parsed_output["classification"]["business_type"]
-    classified.experience_type = parsed_output["classification"]["experience_type"]
+    classified.is_commercial = parsed_output["is_commercial_operator"]
     classified.booking_method = parsed_output["booking_method"]
     classified.operating_scope = parsed_output["operating_scope"]
     classified.follow_booking = parsed_output["follow_booking"]
