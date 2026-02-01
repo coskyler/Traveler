@@ -12,9 +12,9 @@ You are crawling a webpage that is presumably about an experience. You will resp
 
 Respond with a parsable JSON only (no markdowns, no comments) with this exact type:
 {
-  ok: boolean; // is the webpage valid and contains at least some information (not an error/shell page)?
-  is_experience: boolean; // is the webpage broadly about some experience?
-  belongs_to_specified_operator: boolean; // is the webpage about or related to the specified operator? It most likely is. Enter true unless you are very confident it is false.
+  ok: boolean; // True if the webpage is valid and contains at least some information (not an error/shell page)
+  is_experience: boolean; // True if the webpage broadly about some experience
+  belongs_to_specified_operator: boolean; // Default to True. Set False only when you are highly confident the page refers to a different operator or is unrelated.
   // If any of the first three fields are false, fail fast and return null for the rest.
   
   classification:
@@ -26,7 +26,7 @@ Respond with a parsable JSON only (no markdowns, no comments) with this exact ty
     | { operator_type: "Transportation"; business_type: "Transportation" };
     // it is imperative to select the most accurate and specific operator_type and business_type based on the dominating feature of the experience. For example, the dominating feature of a bike sightseeing tour is likely biking (Active / Adventure), but the dominating feature of a walking sightseeing tour is sightseeing.
 
-  is_commercial_operator: boolean | null; // does the operator provide a commercial experience (do they likely offer some experience-related product such as tickets, tours, rentals, etc)?
+  is_commercial_operator: boolean | null; // True if the operator sells or promotes any likely paid, experience-based offering (tickets, tours, activities, rentals, etc). Exclude purely retail products.
   booking_method: "Online Booking" | "Form Submission" | "Contact Info" | "Cannot Infer" | null; // If you are not confident, put "Cannot Infer" and put one hyperlink (in the follow_booking field) to goto to a page that will contain the booking method.
   operating_scope: "local" | "multi_regional" | "international" | null; // Does the operator offer experiences in one destination (local), more than one destination within a country (multi_regional), or more than one country (international)?
   follow_contact: string | null; // If the website is owned by the specified operator, choose one hyperlink to follow to the website's contact page. If none, enter the current URL if it contains contact info.
@@ -46,21 +46,21 @@ Respond with a parsable JSON only (no markdowns, no comments) with this exact ty
 """
 
 _CONTACTS_PROMPT_CONTEXT = """
-You are crawling a tour operator’s contacts page. Return a list of contact profiles.
+You are crawling a tour operator’s contact page to extract contact information and create profiles.
 
 If no contact information exists, return an empty list.
 Only create a profile if it contains at least one contact method.
+Create at most 3 profiles. If more are present, prioritize individuals.
 No contact method may appear in more than one profile.
-Each email, phone, or WhatsApp field must contain exactly one value. If multiple emails, phones, or WhatsApp numbers are present, create separate profiles.
-If more individuals are listed than contact methods, associate each contact with the most relevant individual.
+Each email, phone, or WhatsApp field must contain exactly one value. If multiple relevant emails, phones, or WhatsApp numbers are present, create separate profiles.
 Do not assume a phone number is WhatsApp unless the website states it.
 
 Respond with a parsable JSON only (no markdowns, no comments) with this exact type:
 {
   profiles: {
-    profile_type: "Company" | "Individual"; // assume "Company" unless a person's name is specified
+    profile_type: "Company" | "Individual"; // Use Individual only when the contact information likely belongs to a specific named person (i.e. not a general or shared contact)
     role: "Owner" | "Manager" | "Guide" | "Booking Agent" | "Support" | "Unknown" | null; // null if profile_type is "Company"
-    profile_name: string | null; // null if profile_type is "Company." must be a person's name, otherwise null
+    individual_name: string | null; // null if profile_type is "Company"
     email: string | null;
     phone: string | null;
     whatsapp: string | null;
@@ -242,7 +242,7 @@ def _validate_llm_contacts_output(res: dict) -> bool:
         if set(p) != {
             "profile_type",
             "role",
-            "profile_name",
+            "individual_name",
             "email",
             "phone",
             "whatsapp",
@@ -259,7 +259,7 @@ def _validate_llm_contacts_output(res: dict) -> bool:
             if p["role"] not in allowed_roles and p["role"] is not None:
                 return False
 
-        for k in ("profile_name", "email", "phone", "whatsapp"):
+        for k in ("individual_name", "email", "phone", "whatsapp"):
             if p[k] is not None and not isinstance(p[k], str):
                 return False
 
@@ -310,7 +310,7 @@ def classify(parsed: ParseResult, operator: OperatorInfo) -> ClassifyResult:
         classified.message = "ChatGPT provided invalid JSON"
         return classified
     
-    print(json.dumps(parsed_output, indent=2))
+    # print(json.dumps(parsed_output, indent=2))
 
     if not _validate_llm_output(parsed_output):
         classified.ok = False
@@ -456,7 +456,7 @@ def classify_contacts(parsed: ParseResult, operator: OperatorInfo) -> ClassifyRe
             operator_city=operator.city,
             profile_type=p["profile_type"],
             role=p["role"],
-            profile_name=p["profile_name"],
+            profile_name=p["individual_name"],
             email=p["email"],
             phone=p["phone"],
             whatsapp=p["whatsapp"],
