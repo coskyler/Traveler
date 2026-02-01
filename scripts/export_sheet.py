@@ -190,4 +190,5 @@ with open(
 
         prev_attraction = r["attraction_id"]
 
+pool.close()
 print("DB exported")

@@ -7,10 +7,12 @@ from crawler.pipeline import orchestrator
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, ALL_COMPLETED
 from psycopg.rows import dict_row
 import traceback
+import random
 
 MAX_CONCURRENT_JOBS = 25
-JOB_LIMIT = 100
+JOB_LIMIT = 400
 START_ROW = 51000
+MAX_JOB_ID = 234371 # not a perfect random sample, but sufficient for tests
 
 def _insert_result(attraction_id, res: ClassifyResult):
     with pool.connection() as conn, conn.cursor() as cur:
@@ -122,12 +124,12 @@ with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS) as ex:
                 FROM job
                 WHERE jobs.id = job.id
                 RETURNING jobs.*;
-            """, (START_ROW,))
+            """, (random.randint(0, MAX_JOB_ID),))
             row = cur.fetchone()
             conn.commit()
 
         if row is None:
-            break
+            continue
         
         f = ex.submit(job, row)
 
