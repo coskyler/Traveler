@@ -3,6 +3,7 @@ import random
 from urllib.parse import urlparse
 import logging
 from crawler.pipeline.types import FetchResult
+import time
 
 log = logging.getLogger(__name__)
 
@@ -74,32 +75,43 @@ def fetch(url: str) -> FetchResult:
     if _is_social_url(url):
         return FetchResult(ok=False, message="Social URL")
     
-    try:
-        r = httpx.get(
-            url,
-            headers={
-                "User-Agent": random.choice(_USER_AGENTS),
-                "Accept": (
-                    "text/html,application/xhtml+xml,application/xml;"
-                    "q=0.9,image/avif,image/webp,*/*;q=0.8"
-                ),
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Connection": "keep-alive",
-                "Upgrade-Insecure-Requests": "1",
-            },
-            follow_redirects=True,
-            timeout=20,
-        )
+    attempts = 3
+    for attempt in range(attempts):
+        try:
+            r = httpx.get(
+                url,
+                headers={
+                    "User-Agent": random.choice(_USER_AGENTS),
+                    "Accept": (
+                        "text/html,application/xhtml+xml,application/xml;"
+                        "q=0.9,image/avif,image/webp,*/*;q=0.8"
+                    ),
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Accept-Encoding": "gzip, deflate, br",
+                    "Connection": "keep-alive",
+                    "Upgrade-Insecure-Requests": "1",
+                },
+                follow_redirects=True,
+                timeout=20,
+            )
+            if r.status_code >= 500:
+                r.raise_for_status()
+            break
+        except (httpx.TimeoutException, httpx.NetworkError, httpx.HTTPStatusError):
+            if attempt < attempts - 1:
+                print("Retrying fetch...")
+                time.sleep(2 ** attempt)
+            else:
+                return FetchResult(ok=False, message="Operator request error")
+        except httpx.HTTPError:
+            return FetchResult(ok=False, message="Operator request error")
+    
+    if not r.is_success:
+        return FetchResult(ok=False, message=f"Request error: {r.status_code}")
 
-        if not r.is_success:
-            return FetchResult(ok=False, message=f"Request error: {r.status_code}")
-
-        content_type = (r.headers.get("content-type") or "").lower()
-        if "html" not in content_type:
-            return FetchResult(ok=False, message="Non-HTML response")
+    content_type = (r.headers.get("content-type") or "").lower()
+    if "html" not in content_type:
+        return FetchResult(ok=False, message="Non-HTML response")
 
 
-        return FetchResult(ok=True, url=str(r.url), text=r.text)
-    except httpx.RequestError as e:
-        return FetchResult(ok=False, message="Operator request error")
+    return FetchResult(ok=True, url=str(r.url), text=r.text)
