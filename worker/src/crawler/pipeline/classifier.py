@@ -1,10 +1,7 @@
 from crawler.pipeline.types import OperatorInfo, Profile, ParseResult, ClassifyResult
 from openai import OpenAI
-from dotenv import load_dotenv
 import json
 
-
-load_dotenv()
 client = OpenAI()
 
 _PROMPT_CONTEXT = """

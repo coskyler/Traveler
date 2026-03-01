@@ -1,6 +1,3 @@
-from dotenv import load_dotenv
-load_dotenv()
-
 from crawler.db import pool
 from crawler.pipeline.types import OperatorInfo, ClassifyResult
 from crawler.pipeline import orchestrator
