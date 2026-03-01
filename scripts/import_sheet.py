@@ -1,11 +1,10 @@
-from dotenv import load_dotenv
-load_dotenv()
-
+import os
+import psycopg
 import csv
 from pathlib import Path
 from io import StringIO
-from crawler.db import pool
 
+DATABASE_URL = os.environ["DATABASE_URL"]
 CSV_PATH = Path(__file__).parents[1] / "dataset.csv"
 
 COPY_SQL = """
@@ -18,7 +17,7 @@ COPY jobs_stage (
 FROM STDIN WITH (FORMAT csv);
 """
 
-with pool.connection() as conn, conn.cursor() as cur:
+with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
     with CSV_PATH.open(encoding="utf-8") as f, cur.copy(COPY_SQL) as copy:
         reader = csv.reader(f)
         buf = StringIO()
@@ -76,6 +75,5 @@ with pool.connection() as conn, conn.cursor() as cur:
     )
 
     conn.commit()
-pool.close()
 
 print("CSV imported.")

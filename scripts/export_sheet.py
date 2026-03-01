@@ -1,12 +1,11 @@
-from dotenv import load_dotenv
-
-load_dotenv()
-
+import os
+import psycopg
 import csv
 from datetime import datetime
 from pathlib import Path
-from crawler.db import pool
 from psycopg.rows import dict_row
+
+DATABASE_URL = os.environ["DATABASE_URL"]
 
 query = """
     SELECT
@@ -50,7 +49,7 @@ with open(
 
     rows = []
 
-    with pool.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
+    with psycopg.connect(DATABASE_URL) as conn, conn.cursor(row_factory=dict_row) as cur:
         cur.execute(query)
 
         rows = cur.fetchall()
@@ -190,5 +189,4 @@ with open(
 
         prev_attraction = r["attraction_id"]
 
-pool.close()
 print("DB exported")
