@@ -1,4 +1,4 @@
-from crawler.db import pool
+from crawler.db import connect
 from crawler.pipeline.types import OperatorInfo, ClassifyResult
 from crawler.pipeline import orchestrator
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, ALL_COMPLETED
@@ -7,12 +7,12 @@ import traceback
 import random
 
 MAX_CONCURRENT_JOBS = 25
-JOB_LIMIT = 400
-START_ROW = 51000
+JOB_LIMIT = 1
+START_ROW = 0
 MAX_JOB_ID = 234371 # not a perfect random sample, but sufficient for tests
 
 def _insert_result(attraction_id, res: ClassifyResult):
-    with pool.connection() as conn, conn.cursor() as cur:
+    with connect() as conn, conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO results (
@@ -78,7 +78,7 @@ def _insert_result(attraction_id, res: ClassifyResult):
         cur.execute(
             """
             UPDATE jobs
-            SET status = 'succeeded'
+            SET status = 'finished'
             WHERE attraction_id = %s
             """,
             (attraction_id,),
@@ -105,7 +105,7 @@ with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS) as ex:
     inflight = set()
 
     for _ in range(JOB_LIMIT):
-        with pool.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
+        with connect(row_factory=dict_row) as conn, conn.cursor() as cur:
             cur.execute("""
                 WITH job AS (
                     SELECT id
@@ -121,12 +121,12 @@ with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS) as ex:
                 FROM job
                 WHERE jobs.id = job.id
                 RETURNING jobs.*;
-            """, (random.randint(0, MAX_JOB_ID),))
+            """, (START_ROW,)) # random.randint(0, MAX_JOB_ID) for random sample
             row = cur.fetchone()
             conn.commit()
 
         if row is None:
-            continue
+            break
         
         f = ex.submit(job, row)
 
@@ -144,4 +144,4 @@ with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS) as ex:
 if inflight:
     wait(inflight, return_when=ALL_COMPLETED)
 
-pool.close()
+print("Worker done")

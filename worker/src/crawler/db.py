@@ -1,11 +1,7 @@
-from psycopg_pool import ConnectionPool
-
 import os
+import psycopg
+
 DATABASE_URL = os.environ["DATABASE_URL"]
 
-pool = ConnectionPool(
-    conninfo=DATABASE_URL,
-    min_size=1,
-    max_size=10,
-    timeout=10,
-)
+def connect(*, row_factory=None):
+    return psycopg.connect(DATABASE_URL, row_factory=row_factory)

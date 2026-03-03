@@ -14,4 +14,4 @@ RUN chmod +x entrypoint.sh
 ENV PYTHONPATH=/app/src
 
 ENTRYPOINT ["./entrypoint.sh"]
-CMD ["python", "-m", "crawler.worker"]
+CMD ["python", "-u", "-m", "crawler.worker"]

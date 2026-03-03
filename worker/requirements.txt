@@ -43,8 +43,10 @@ lxml==6.0.2
     # via traveler (pyproject.toml)
 openai==2.14.0
     # via traveler (pyproject.toml)
-psycopg==3.3.2
+psycopg[binary]==3.3.2
     # via traveler (pyproject.toml)
+psycopg-binary==3.3.2
+    # via psycopg
 psycopg-pool==3.3.0
     # via traveler (pyproject.toml)
 publicsuffix2==2.20191221

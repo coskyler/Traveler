@@ -39,11 +39,11 @@ CREATE TABLE jobs (
     number_of_products   INTEGER,
 
     -- queue state
-    status TEXT NOT NULL DEFAULT 'queued'
+    status TEXT NOT NULL DEFAULT 'idle' -- idle | queued | running | finished
 );
 
-CREATE INDEX jobs_queued_idx ON jobs(attraction_id) WHERE status='queued';
-CREATE INDEX url_idx ON jobs(operator_website) WHERE status!='queued';
+CREATE INDEX jobs_queued_idx ON jobs(attraction_id);
+CREATE INDEX url_idx ON jobs(operator_website);
 
 CREATE TABLE results (
     attraction_id BIGINT PRIMARY KEY REFERENCES jobs(attraction_id),
