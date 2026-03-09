@@ -1,11 +1,23 @@
+# Environment
 .env*
 .venv/
+
+# PgBouncer
 userlist.txt
 
+# Python
 __pycache__/
 *.pyc
 *.egg-info/
 build/
 
+# Data
 *.csv
 outputs/
+
+# Terraform
+.terraform/
+terraform.tfstate
+terraform.tfstate.*
+crash.log
+*.tfvars
