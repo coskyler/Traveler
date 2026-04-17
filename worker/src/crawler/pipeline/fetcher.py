@@ -15,6 +15,8 @@ from playwright.async_api import async_playwright
 
 from crawler.pipeline.types import FetchResult
 
+_PAGE_POOL = 5
+
 _playwright = None
 _context = None
 _fetch_queue = queue.Queue()
@@ -182,22 +184,41 @@ async def _close_browser_state():
 
 
 async def _browser_loop():
+    tasks = set()
     try:
         while True:
-            item = _fetch_queue.get()
-            try:
+            while len(tasks) < _PAGE_POOL:
+                try:
+                    item = _fetch_queue.get_nowait()
+                except queue.Empty:
+                    break
+
                 if item is _STOP:
+                    _fetch_queue.task_done()
                     return
 
                 url, future = item
-                try:
-                    future.set_result(await _fetch_in_browser(url))
-                except BaseException as exc:
-                    future.set_exception(exc)
-            finally:
-                _fetch_queue.task_done()
+                task = asyncio.create_task(_run_fetch(url, future))
+                task.add_done_callback(lambda _: _fetch_queue.task_done())
+                tasks.add(task)
+
+            if tasks:
+                done, tasks = await asyncio.wait(
+                    tasks, timeout=0.05, return_when=asyncio.FIRST_COMPLETED
+                )
+            else:
+                await asyncio.sleep(0.05)
     finally:
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         await _close_browser_state()
+
+
+async def _run_fetch(url: str, future: Future):
+    try:
+        future.set_result(await _fetch_in_browser(url))
+    except BaseException as exc:
+        future.set_exception(exc)
 
 
 def _run_browser_loop():
