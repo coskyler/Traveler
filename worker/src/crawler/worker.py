@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, ALL_CO
 from psycopg.rows import dict_row
 import traceback
 import random
+import json
 
 MAX_CONCURRENT_JOBS = 25
 JOB_LIMIT = 1
@@ -98,6 +99,7 @@ def job(row):
 
     result, trace = orchestrator.run(operator)
     print(trace.to_string())
+    print(json.dumps(result.model_dump(), indent=2))
     _insert_result(row["attraction_id"], result)
 
     print(f"Finished {row['operator']}")

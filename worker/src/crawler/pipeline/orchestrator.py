@@ -57,10 +57,10 @@ def run(operator: OperatorInfo) -> tuple[ClassifyResult, Trace]:
             classification.merge(searched_classification)
 
             if searched_err:
-                return classification
+                return classification, trace
         else:
             classification.merge(ClassifyResult(ok=False, message=searched.message))
-            return classification
+            return classification, trace
             
     if classification.follow_booking:
         booking_classification, booking_err = _classify_pipeline(classification.follow_booking, operator, _BOOKING_PROMPT, ExpectedBooking, trace)
@@ -69,5 +69,5 @@ def run(operator: OperatorInfo) -> tuple[ClassifyResult, Trace]:
     if classification.follow_contact:
         profiles_classification, profiles_err = _classify_pipeline(classification.follow_contact, operator, _PROFILES_PROMPT, ExpectedProfiles, trace)
         classification.merge(profiles_classification)
-
+    
     return classification, trace
