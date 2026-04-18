@@ -49,9 +49,9 @@ class ClassifyResult(BaseModel):
     used_stealth: bool = False
 
     def merge(self, other: "ClassifyResult") -> None:
-        for k in self.model_fields_set:
+        for k in self.__class__.model_fields:
             a, b = getattr(self, k), getattr(other, k)
-            if b is None:
+            if not b:
                 continue
             if k in {"input_tokens", "cached_input_tokens", "output_tokens"}:
                 setattr(self, k, a + b)
@@ -61,7 +61,7 @@ class ClassifyResult(BaseModel):
                 setattr(self, k, (a or []) + b)
             elif k == "message":
                 setattr(self, k, f"{a} | {b}" if a else b)
-            elif a is None:
+            else:
                 setattr(self, k, b)
 
 class SearchResult(BaseModel):

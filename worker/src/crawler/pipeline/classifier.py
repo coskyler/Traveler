@@ -8,12 +8,7 @@ from crawler.pipeline.types import OperatorInfo, ParseResult, ClassifyResult
 client = OpenAI()
 
 
-def classify(
-    parsed: ParseResult,
-    operator: OperatorInfo,
-    prompt_context: str,
-    expected_shape,
-) -> ClassifyResult:
+def classify(parsed: ParseResult, operator: OperatorInfo, prompt_context: str, expected_shape) -> ClassifyResult:
     prompt = (
         prompt_context
         + "\nSpecified operator: "
