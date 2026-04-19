@@ -29,17 +29,18 @@ _PROFILES_PROMPT = (_PROMPT_DIR / "profiles.txt").read_text(encoding="utf-8")
 def _classify_pipeline(url: str, operator: OperatorInfo, prompt: str, model_output_shape: Schema, trace: Trace) -> tuple[ClassifyResult, str | None]:
     fetched: FetchResult = fetch(url, trace=trace)
     if not fetched.ok:
-        return ClassifyResult(ok=False, message=fetched.message, final_url=fetched.url), "fetch"
+        return ClassifyResult(ok=False, message=fetched.message, final_url=fetched.url, used_stealth=fetched.used_stealth), "fetch"
 
     parsed: ParseResult = parse(fetched, trace=trace)
     if not parsed.ok:
-        return ClassifyResult(ok=False, message=parsed.message, final_url=fetched.url), "parse"
+        return ClassifyResult(ok=False, message=parsed.message, final_url=fetched.url, used_stealth=fetched.used_stealth), "parse"
     
     classification: ClassifyResult = classify(parsed, operator, prompt, model_output_shape, trace=trace)
     if not classification.ok:
-        return ClassifyResult(ok=False, message=classification.message, final_url=fetched.url), "classification"
+        return ClassifyResult(ok=False, message=classification.message, final_url=fetched.url, used_stealth=fetched.used_stealth), "classification"
     
     classification.final_url = fetched.url
+    classification.used_stealth = fetched.used_stealth
     return classification, None
 
 

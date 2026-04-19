@@ -19,6 +19,7 @@ class FetchResult(BaseModel):
     url: str | None = None
     text: str | None = None
     message: str | None = None
+    used_stealth: bool = False
 
 class ParseResult(BaseModel):
     ok: bool

@@ -150,7 +150,7 @@ async def _fetch_in_browser(url: str, trace) -> FetchResult:
             break
         except (PlaywrightTimeoutError, PlaywrightError) as e:
             attempt_results.append(
-                {"attempt": attempt + 1, "result": type(e).__name__, "message": str(e), "latency": round(time.perf_counter() - attempt_start, 3)}
+                {"attempt": attempt + 1, "result": type(e).__name__, "message": str(e).split("\n", 1)[0], "latency": round(time.perf_counter() - attempt_start, 3)}
             )
             if attempt < attempts - 1:
                 print(f"Retrying fetch... {e}")
@@ -317,24 +317,24 @@ def _stealth_fetch(url: str, trace) -> FetchResult:
             break
         except httpx.RequestError as e:
             attempt_results.append(
-                {"attempt": attempt + 1, "result": type(e).__name__, "message": str(e), "latency": round(time.perf_counter() - attempt_start, 3)}
+                {"attempt": attempt + 1, "result": type(e).__name__, "message": str(e).split("\n", 1)[0], "latency": round(time.perf_counter() - attempt_start, 3)}
             )
             if attempt == 0:
                 time.sleep(2)
 
     if response is None:
         trace.add("stealth_fetch", ok=False, message="Operator request error", attempts=attempt_results)
-        return FetchResult(ok=False, message="Operator request error")
+        return FetchResult(ok=False, message="Operator request error", used_stealth=True)
 
     if not response.is_success:
         trace.add("stealth_fetch", ok=False, message=f"Request error: {response.status_code}", attempts=attempt_results)
-        return FetchResult(ok=False, message=f"Request error: {response.status_code}")
+        return FetchResult(ok=False, message=f"Request error: {response.status_code}", used_stealth=True)
 
     content_type = (response.headers.get("content-type") or "").lower()
     text = response.text
     if "html" not in content_type and "<html" not in text.lower():
         trace.add("stealth_fetch", ok=False, message="Non-HTML response", attempts=attempt_results)
-        return FetchResult(ok=False, message="Non-HTML response")
+        return FetchResult(ok=False, message="Non-HTML response", used_stealth=True)
 
     trace.add("stealth_fetch", ok=True, attempts=attempt_results)
-    return FetchResult(ok=True, url=url, text=text)
+    return FetchResult(ok=True, url=url, text=text, used_stealth=True)
