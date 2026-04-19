@@ -1,60 +1,85 @@
 import os
-import psycopg
 import csv
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+
+import psycopg
 from psycopg.rows import dict_row
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
 query = """
-    SELECT
-        r.*,
-        j.*,
-        p.profile_type,
-        p.role,
-        p.profile_name,
-        p.email   AS profile_email,
-        p.phone   AS profile_phone,
-        p.whatsapp
-    FROM results r
-    JOIN jobs j
-        ON j.attraction_id = r.attraction_id
-    LEFT JOIN profiles p
-        ON p.attraction_id = r.attraction_id
-    ORDER BY r.attraction_id
+    SELECT *
+    FROM jobs
+    WHERE status IN ('finished', 'running')
+    ORDER BY attraction_id
 """
 
+
+def to_iso(ts) -> str:
+    if ts is None:
+        return ""
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+
+
+def trace_to_string(trace: dict | None) -> str:
+    if not trace:
+        return ""
+
+    start_time = trace.get("start_time")
+    steps = trace.get("steps", [])
+
+    if start_time is None:
+        return ""
+
+    lines = []
+
+    for e in steps:
+        dt = e["t"] - start_time
+        step = e["step"]
+        parts = []
+        for k, v in e.items():
+            if k in {"t", "step"}:
+                continue
+            if k == "attempts":
+                for attempt in v:
+                    n = attempt.get("attempt")
+                    info = ", ".join(
+                        f"{ak}={av}" for ak, av in attempt.items() if ak != "attempt"
+                    )
+                    parts.append(f"attempt-{n}=({info})")
+            else:
+                parts.append(f"{k}={v}")
+        meta = " ".join(parts)
+        line = f"{f'[{dt:.2f}s]':>9} {step:<16} {meta}".rstrip()
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
+timestamp = f"{datetime.now():%Y%m%d_%H%M%S}"
+export_path = Path("outputs") / f"{timestamp}_Export.csv"
+profiles_path = Path("outputs") / f"{timestamp}_Profiles.csv"
+
 with open(
-    Path("outputs") / f"{datetime.now():%Y%m%d_%H%M%S}_Before.csv",
+    export_path,
     "w",
     newline="",
     encoding="utf-8-sig",
-) as unmodified_file, open(
-    Path("outputs") / f"{datetime.now():%Y%m%d_%H%M%S}_After.csv",
+) as export_file, open(
+    profiles_path,
     "w",
     newline="",
     encoding="utf-8-sig",
-) as modified_file, open(
-    Path("outputs") / f"{datetime.now():%Y%m%d_%H%M%S}_Profiles.csv",
-    "w",
-    newline="",
-    encoding="utf-8-sig",
-) as profile_file:
-
-
-    unmodified_writer = csv.writer(unmodified_file)
-    modified_writer = csv.writer(modified_file)
-    profile_writer = csv.writer(profile_file)
-
-    rows = []
+) as profiles_file:
+    export_writer = csv.writer(export_file)
+    profiles_writer = csv.writer(profiles_file)
 
     with psycopg.connect(DATABASE_URL) as conn, conn.cursor(row_factory=dict_row) as cur:
         cur.execute(query)
-
         rows = cur.fetchall()
 
-    unmodified_writer.writerow(
+    export_writer.writerow(
         [
             "Attraction ID",
             "Destination ID",
@@ -72,40 +97,23 @@ with open(
             "Average Rating",
             "Review Count",
             "Number of Products",
-        ]
-    )
-
-    modified_writer.writerow(
-        [
-            "Attraction ID",
-            "Destination ID",
-            "Trip Operator URL",
-            "Operator Name",
-            "Country",
-            "State",
-            "City",
-            "Email",
-            "Phone",
-            "Final URL",
-            "Bookable",
             "Operator Type",
             "Business Type",
-            "Experience Type",
-            "Commercial Operator",
-            "Average Rating",
-            "Review Count",
-            "Number of Products",
             "Booking Method",
+            "Commercial Operator",
             "Operating Scope",
-            "Message",
-            "Searched",
             "Input Tokens",
             "Cached Input Tokens",
             "Output Tokens",
+            "Message",
+            "Searched",
+            "Used Stealth",
+            "Start Time",
+            "Trace",
         ]
     )
 
-    profile_writer.writerow(
+    profiles_writer.writerow(
         [
             "Attraction ID",
             "Operator Name",
@@ -119,74 +127,58 @@ with open(
         ]
     )
 
-    prev_attraction = None
-    for r in rows:
-        if prev_attraction != r["attraction_id"]:  # skip duplicates
-            unmodified_writer.writerow(
-                [
-                    r["attraction_id"],
-                    r["destination_id"],
-                    r["trip_operator_url"],
-                    r["operator"],
-                    r["country"],
-                    r["state"],
-                    r["city"],
-                    r["email"],
-                    r["phone"],
-                    r["operator_website"],
-                    r["bookable"],
-                    r["arival_category"],
-                    r["arival_sub_category"],
-                    r["avg_rating"],
-                    r["review_count"],
-                    r["number_of_products"],
-                ]
-            )
+    for row in rows:
+        result = row.get("result") or {}
+        trace = row.get("trace") or {}
+        profiles = result.get("profiles") or []
 
-            modified_writer.writerow(
-                [
-                    r["attraction_id"],
-                    r["destination_id"],
-                    r["trip_operator_url"],
-                    r["operator"],
-                    r["country"],
-                    r["state"],
-                    r["city"],
-                    r["email"],
-                    r["phone"],
-                    r["final_url"],
-                    r["bookable"],
-                    r["operator_type"],
-                    r["business_type"],
-                    r["experience_type"],
-                    r["is_commercial"],
-                    r["avg_rating"],
-                    r["review_count"],
-                    r["number_of_products"],
-                    r["booking_method"],
-                    r["operating_scope"],
-                    r["message"],
-                    r["searched"],
-                    r["input_tokens"],
-                    r["cached_input_tokens"],
-                    r["output_tokens"],
-                ]
-            )
-
-        profile_writer.writerow(
+        export_writer.writerow(
             [
-                r["attraction_id"],
-                r["operator"],
-                r["final_url"],
-                r["profile_type"],
-                r["role"],
-                r["profile_name"],
-                r["profile_email"],
-                r["profile_phone"],
-                r["whatsapp"],
+                row["attraction_id"],
+                row["destination_id"],
+                row["trip_operator_url"],
+                row["operator"],
+                row["country"],
+                row["state"],
+                row["city"],
+                row["email"],
+                row["phone"],
+                row["operator_website"],
+                row["bookable"],
+                row["arival_category"],
+                row["arival_sub_category"],
+                row["avg_rating"],
+                row["review_count"],
+                row["number_of_products"],
+                result.get("operator_type"),
+                result.get("business_type"),
+                result.get("booking_method"),
+                result.get("is_commercial_operator"),
+                result.get("operating_scope"),
+                result.get("input_tokens"),
+                result.get("cached_input_tokens"),
+                result.get("output_tokens"),
+                result.get("message"),
+                result.get("searched"),
+                result.get("used_stealth"),
+                to_iso(trace.get("start_time")),
+                trace_to_string(trace),
             ]
         )
 
-        prev_attraction = r["attraction_id"]
+        for profile in profiles:
+            profiles_writer.writerow(
+                [
+                    row["attraction_id"],
+                    row["operator"],
+                    result.get("final_url"),
+                    profile.get("profile_type"),
+                    profile.get("role"),
+                    profile.get("individual_name"),
+                    profile.get("email"),
+                    profile.get("phone"),
+                    profile.get("whatsapp"),
+                ]
+            )
 
 print("DB exported")

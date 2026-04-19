@@ -1,9 +1,12 @@
 import time
+from typing import Any, Dict, List
 
-class Trace:
-    def __init__(self):
-        self.start_time = time.time()
-        self.steps = []
+from pydantic import BaseModel, Field
+
+
+class Trace(BaseModel):
+    start_time: float = Field(default_factory=time.time)
+    steps: List[Dict[str, Any]] = Field(default_factory=list)
 
     def add(self, step, **data):
         self.steps.append({
@@ -33,7 +36,7 @@ class Trace:
                 else:
                     parts.append(f"{k}={v}")
             meta = " ".join(parts)
-            line = f"{f"[{dt:.2f}s]":>9} {step:<16} {meta}".rstrip()
+            line = f"{f'[{dt:.2f}s]':>9} {step:<16} {meta}".rstrip()
             lines.append(line)
 
         return "\n".join(lines)

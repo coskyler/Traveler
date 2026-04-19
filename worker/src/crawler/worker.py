@@ -1,8 +1,10 @@
 from crawler.db import connect
 from crawler.pipeline.types import OperatorInfo, ClassifyResult
 from crawler.pipeline import orchestrator
+from crawler.pipeline.trace import Trace
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, ALL_COMPLETED
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 import traceback
 import random
 import json
@@ -12,77 +14,17 @@ JOB_LIMIT = 1
 START_ROW = 0
 MAX_JOB_ID = 234371 # not a perfect random sample, but sufficient for tests
 
-def _insert_result(attraction_id, res: ClassifyResult):
+def _insert_result(attraction_id, res: ClassifyResult, trace: Trace):
     with connect() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO results (
-                attraction_id,
-                final_url,
-                operator_type,
-                business_type,
-                experience_type,
-                is_commercial,
-                booking_method,
-                operating_scope,
-                message,
-                input_tokens,
-                cached_input_tokens,
-                output_tokens,
-                searched
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (attraction_id) DO NOTHING
-            """,
-            (
-                attraction_id,
-                res.final_url,
-                res.operator_type,
-                res.business_type,
-                res.experience_type,
-                res.is_commercial_operator,
-                res.booking_method,
-                res.operating_scope,
-                res.message,
-                res.input_tokens,
-                res.cached_input_tokens,
-                res.output_tokens,
-                res.searched,
-            ),
-        )
-
-        for profile in res.profiles or []:
-            cur.execute(
-                """
-                INSERT INTO profiles (
-                    attraction_id,
-                    profile_type,
-                    role,
-                    profile_name,
-                    email,
-                    phone,
-                    whatsapp
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    attraction_id,
-                    profile.profile_type,
-                    profile.role,
-                    profile.individual_name,
-                    profile.email,
-                    profile.phone,
-                    profile.whatsapp,
-                ),
-            )
-
-        cur.execute(
-            """
             UPDATE jobs
-            SET status = 'finished'
+            SET status = 'finished',
+                result = %s,
+                trace = %s
             WHERE attraction_id = %s
             """,
-            (attraction_id,),
+            (Jsonb(res.model_dump()), Jsonb(trace.model_dump()), attraction_id),
         )
 
         conn.commit()
@@ -100,7 +42,7 @@ def job(row):
     result, trace = orchestrator.run(operator)
     print(trace.to_string())
     print(json.dumps(result.model_dump(), indent=2))
-    _insert_result(row["attraction_id"], result)
+    _insert_result(row["attraction_id"], result, trace)
 
     print(f"Finished {row['operator']}")
 
