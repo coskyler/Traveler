@@ -31,6 +31,24 @@ resource "aws_iam_role_policy_attachment" "compute_secrets" {
   policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadOnly"
 }
 
+# Allow get and put to s3 bucket
+resource "aws_iam_role_policy" "compute_html_cache" {
+  name = "compute-html-cache"
+  role = aws_iam_role.compute.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "s3:GetObject",
+        "s3:PutObject"
+      ]
+      Resource = "arn:aws:s3:::${data.terraform_remote_state.persistent.outputs.html_cache_bucket_name}/*"
+    }]
+  })
+}
+
 # Instance profile
 
 resource "aws_iam_instance_profile" "compute" {

@@ -25,3 +25,9 @@ output "pgbouncer_security_group_id" {
 output "db_host" {
   value = aws_db_instance.postgres.address
 }
+
+# S3 BUCKET
+
+output "html_cache_bucket_name" {
+  value = aws_s3_bucket.html_cache.bucket
+}
