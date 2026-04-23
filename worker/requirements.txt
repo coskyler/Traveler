@@ -10,6 +10,12 @@ anyio==4.12.1
     # via
     #   httpx
     #   openai
+boto3==1.42.89
+    # via webswarm-worker (pyproject.toml)
+botocore==1.42.94
+    # via
+    #   boto3
+    #   s3transfer
 certifi==2026.2.25
     # via
     #   httpcore
@@ -32,7 +38,7 @@ httpcore==1.0.9
 httpx==0.28.1
     # via
     #   openai
-    #   traveler (pyproject.toml)
+    #   webswarm-worker (pyproject.toml)
 idna==3.11
     # via
     #   anyio
@@ -41,42 +47,52 @@ idna==3.11
     #   tldextract
 jiter==0.13.0
     # via openai
+jmespath==1.1.0
+    # via
+    #   boto3
+    #   botocore
 lxml==6.0.2
-    # via traveler (pyproject.toml)
+    # via webswarm-worker (pyproject.toml)
 openai==2.14.0
-    # via traveler (pyproject.toml)
+    # via webswarm-worker (pyproject.toml)
 playwright==1.58.0
-    # via traveler (pyproject.toml)
+    # via webswarm-worker (pyproject.toml)
 psycopg[binary]==3.3.2
-    # via traveler (pyproject.toml)
+    # via webswarm-worker (pyproject.toml)
 psycopg-binary==3.3.2
     # via psycopg
 psycopg-pool==3.3.0
-    # via traveler (pyproject.toml)
+    # via webswarm-worker (pyproject.toml)
 publicsuffix2==2.20191221
-    # via traveler (pyproject.toml)
+    # via webswarm-worker (pyproject.toml)
 pydantic==2.12.5
     # via
     #   openai
-    #   traveler (pyproject.toml)
+    #   webswarm-worker (pyproject.toml)
 pydantic-core==2.41.5
     # via pydantic
 pyee==13.0.1
     # via playwright
+python-dateutil==2.9.0.post0
+    # via botocore
 rapidfuzz==3.14.3
-    # via traveler (pyproject.toml)
+    # via webswarm-worker (pyproject.toml)
 requests==2.32.5
     # via
     #   requests-file
     #   tldextract
 requests-file==3.0.1
     # via tldextract
+s3transfer==0.16.1
+    # via boto3
 schema==0.7.8
-    # via traveler (pyproject.toml)
+    # via webswarm-worker (pyproject.toml)
+six==1.17.0
+    # via python-dateutil
 sniffio==1.3.1
     # via openai
 tldextract==5.3.1
-    # via traveler (pyproject.toml)
+    # via webswarm-worker (pyproject.toml)
 tqdm==4.67.3
     # via openai
 typing-extensions==4.15.0
@@ -92,6 +108,8 @@ typing-inspection==0.4.2
 tzdata==2025.3
     # via psycopg
 unidecode==1.4.0
-    # via traveler (pyproject.toml)
+    # via webswarm-worker (pyproject.toml)
 urllib3==2.6.3
-    # via requests
+    # via
+    #   botocore
+    #   requests

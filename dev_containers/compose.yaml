@@ -1,19 +1,19 @@
-name: traveler
+name: webswarm-dev
 
 services:
   db:
     image: postgres:18
-    container_name: traveler_db
+    container_name: webswarm-db
     env_file: ../worker/.env
     ports:
       - "5432:5432"
     volumes:
-      - traveler_pgdata:/var/lib/postgresql
+      - webswarm_pgdata:/var/lib/postgresql
       - ./jobs_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
 
   pgbouncer:
     image: edoburu/pgbouncer:latest
-    container_name: traveler_pgbouncer
+    container_name: webswarm-pgbouncer
     ports:
       - "6432:6432"
     volumes:
@@ -24,4 +24,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  traveler_pgdata:
+  webswarm_pgdata:
