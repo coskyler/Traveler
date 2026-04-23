@@ -5,7 +5,6 @@ import queue
 import threading
 import time
 from concurrent.futures import Future
-from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
@@ -14,24 +13,23 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
 from crawler.pipeline.types import FetchResult
+from crawler.storage import get_storage
+
+s3 = get_storage()
 
 _PAGE_POOL = 5
 
 _playwright = None
+_browser = None
 _context = None
+_context_lock = None
 _fetch_queue = queue.Queue()
 _fetch_thread = None
 _fetch_thread_lock = threading.Lock()
 _STOP = object()
-_PROFILE_DIR = Path(".chromium-profile")
 _STEALTH_SCRIPT = """
 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
 Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
-Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
-Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
-Object.defineProperty(navigator, 'maxTouchPoints', { get: () => 0 });
-Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
 window.chrome = window.chrome || { runtime: {} };
 """
 
@@ -89,26 +87,57 @@ def _is_not_found(result: FetchResult) -> bool:
     return result.message in {"Request error: 404", "Request error: 410"}
 
 
+def _is_browser_crash_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(
+        marker in message
+        for marker in (
+            "target page, context or browser has been closed",
+            "target crashed",
+            "browser has been closed",
+            "browser closed",
+            "context has been closed",
+            "page has been closed",
+        )
+    )
+
+
 async def _get_context():
-    global _playwright, _context
+    global _playwright, _browser, _context, _context_lock
 
     if _context:
         return _context
 
-    _playwright = await async_playwright().start()
-    _context = await _playwright.chromium.launch_persistent_context(
-        user_data_dir=_PROFILE_DIR,
-        headless=True,
-        viewport={"width": 1366, "height": 768},
-        screen={"width": 1366, "height": 768},
-        locale="en-US",
-        timezone_id="America/New_York",
-        color_scheme="light",
-        device_scale_factor=1,
-        args=["--disable-blink-features=AutomationControlled"],
-    )
-    await _context.add_init_script(_STEALTH_SCRIPT)
-    return _context
+    if _context_lock is None:
+        _context_lock = asyncio.Lock()
+
+    async with _context_lock:
+        if _context:
+            return _context
+
+        _playwright = await async_playwright().start()
+        _browser = await _playwright.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        _context = await _browser.new_context(
+            viewport={"width": 1366, "height": 768},
+            locale="en-US",
+            timezone_id="America/New_York",
+            color_scheme="light",
+        )
+        await _context.add_init_script(_STEALTH_SCRIPT)
+        return _context
+
+
+async def _restart_browser_state():
+    global _context_lock
+
+    if _context_lock is None:
+        _context_lock = asyncio.Lock()
+
+    async with _context_lock:
+        await _close_browser_state()
 
 
 async def _fetch_in_browser(url: str, trace) -> FetchResult:
@@ -128,6 +157,18 @@ async def _fetch_in_browser(url: str, trace) -> FetchResult:
             response = await page.goto(
                 url, wait_until="domcontentloaded", timeout=20000
             )
+
+            for selector in ("main", "article"):
+                try:
+                    await page.wait_for_selector(selector, timeout=3000)
+                    break
+                except PlaywrightTimeoutError:
+                    pass
+            else:
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=2000)
+                except PlaywrightTimeoutError:
+                    pass
             if response is None:
                 attempt_results.append({"attempt": attempt + 1, "result": "no response", "latency": round(time.perf_counter() - attempt_start, 3)})
                 trace.add("fetch", ok=False, message="Operator request error", attempts=attempt_results)
@@ -149,6 +190,8 @@ async def _fetch_in_browser(url: str, trace) -> FetchResult:
             )
             break
         except (PlaywrightTimeoutError, PlaywrightError) as e:
+            if _is_browser_crash_error(e):
+                await _restart_browser_state()
             attempt_results.append(
                 {"attempt": attempt + 1, "result": type(e).__name__, "message": str(e).split("\n", 1)[0], "latency": round(time.perf_counter() - attempt_start, 3)}
             )
@@ -182,7 +225,7 @@ async def _fetch_in_browser(url: str, trace) -> FetchResult:
 
 
 async def _close_browser_state():
-    global _playwright, _context
+    global _playwright, _browser, _context, _context_lock
 
     try:
         if _context:
@@ -192,6 +235,14 @@ async def _close_browser_state():
     finally:
         _context = None
 
+    if _browser:
+        try:
+            await _browser.close()
+        except PlaywrightError:
+            pass
+        finally:
+            _browser = None
+
     if _playwright:
         try:
             await _playwright.stop()
@@ -199,6 +250,8 @@ async def _close_browser_state():
             pass
         finally:
             _playwright = None
+
+    _context_lock = None
 
 
 async def _browser_loop():
@@ -274,15 +327,25 @@ def fetch(url: str, trace) -> FetchResult:
     if _is_social_url(url):
         trace.add("fetch", ok=False, message="Social URL")
         return FetchResult(ok=False, message="Social URL")
+    
+    cached = s3.get(url)
+
+    if cached:
+        trace.add("fetch", ok=cached.ok, message="Found in S3")
+        return cached
 
     _ensure_browser_thread()
     future = Future()
     _fetch_queue.put((url, future, trace))
     result = future.result()
     if result.ok or _is_not_found(result):
+        s3.put(url, result)
         return result
 
-    return _stealth_fetch(url, trace)
+    stealth_result = _stealth_fetch(url, trace)
+
+    s3.put(url, stealth_result)
+    return stealth_result
 
 
 def _stealth_fetch(url: str, trace) -> FetchResult:

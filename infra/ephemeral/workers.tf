@@ -23,6 +23,7 @@ locals {
       --restart unless-stopped \
       -e ENVIRONMENT=production \
       -e AWS_REGION=${var.aws_region} \
+      -e S3_BUCKET=${data.terraform_remote_state.persistent.outputs.html_cache_bucket_name} \
       -e PGBOUNCER_HOST=${aws_lb.pgbouncer.dns_name} \
       -e DB_CREDENTIALS_SECRET_NAME=${var.db_credentials_secret_name} \
       -e OPENAI_SECRET_NAME=${var.openai_secret_name} \

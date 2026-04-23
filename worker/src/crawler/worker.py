@@ -10,7 +10,7 @@ import random
 import json
 
 MAX_CONCURRENT_JOBS = 25
-JOB_LIMIT = 1
+JOB_LIMIT = 5
 START_ROW = 0
 MAX_JOB_ID = 234371 # not a perfect random sample, but sufficient for tests
 
