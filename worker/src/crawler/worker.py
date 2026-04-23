@@ -50,7 +50,7 @@ with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS) as ex:
     inflight = set()
 
     for _ in range(JOB_LIMIT):
-        with connect(row_factory=dict_row) as conn, conn.cursor() as cur:
+        with connect() as conn, conn.cursor() as cur:
             cur.execute("""
                 WITH job AS (
                     SELECT id
