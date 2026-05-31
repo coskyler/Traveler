@@ -10,6 +10,7 @@ import threading
 import traceback
 import random
 import json
+import os
 
 MAX_CONCURRENT_JOBS = 25
 JOB_LIMIT = 5
@@ -78,7 +79,8 @@ def job(row):
 
     print(f"Finished {row['operator']}")
 
-threading.Thread(target=_poll_imds_for_spot_interruption, daemon=True).start()
+if os.getenv("ENVIRONMENT") == "production":
+    threading.Thread(target=_poll_imds_for_spot_interruption, daemon=True).start()
 
 with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS) as ex:
     inflight = set()
