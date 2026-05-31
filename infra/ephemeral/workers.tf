@@ -42,6 +42,13 @@ resource "aws_launch_template" "workers" {
     }
   }
 
+  # Increase hop limit to 2, so containers can access IMDS over Docker network bridge
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+  }
+
   tags = {
     Name = "worker-template"
   }

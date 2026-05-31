@@ -5,6 +5,8 @@ from crawler.pipeline.trace import Trace
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, ALL_COMPLETED
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from urllib.request import Request, urlopen
+import threading
 import traceback
 import random
 import json
@@ -13,6 +15,36 @@ MAX_CONCURRENT_JOBS = 25
 JOB_LIMIT = 5
 START_ROW = 0
 MAX_JOB_ID = 234371 # not a perfect random sample, but sufficient for tests
+IMDS_SPOT_INSTANCE_ACTION_URL = "http://169.254.169.254/latest/meta-data/spot/instance-action"
+IMDS_TOKEN_URL = "http://169.254.169.254/latest/api/token"
+IMDS_POLL_INTERVAL_SECONDS = 5
+IMDS_TIMEOUT_SECONDS = 1
+
+_spot_instance_shutting_down = threading.Event()
+
+
+def _poll_imds_for_spot_interruption():
+    while not _spot_instance_shutting_down.is_set():
+        try:
+            token_request = Request(
+                IMDS_TOKEN_URL,
+                method="PUT",
+                headers={"X-aws-ec2-metadata-token-ttl-seconds": "21600"},
+            )
+            with urlopen(token_request, timeout=IMDS_TIMEOUT_SECONDS) as response:
+                token = response.read().decode()
+
+            action_request = Request(
+                IMDS_SPOT_INSTANCE_ACTION_URL,
+                headers={"X-aws-ec2-metadata-token": token},
+            )
+            with urlopen(action_request, timeout=IMDS_TIMEOUT_SECONDS):
+                _spot_instance_shutting_down.set()
+        except OSError:
+            pass
+
+        _spot_instance_shutting_down.wait(IMDS_POLL_INTERVAL_SECONDS)
+
 
 def _insert_result(attraction_id, res: ClassifyResult, trace: Trace):
     with connect() as conn, conn.cursor() as cur:
@@ -46,10 +78,15 @@ def job(row):
 
     print(f"Finished {row['operator']}")
 
+threading.Thread(target=_poll_imds_for_spot_interruption, daemon=True).start()
+
 with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS) as ex:
     inflight = set()
 
     for _ in range(JOB_LIMIT):
+        if _spot_instance_shutting_down.is_set():
+            break
+
         with connect() as conn, conn.cursor() as cur:
             cur.execute("""
                 WITH job AS (
