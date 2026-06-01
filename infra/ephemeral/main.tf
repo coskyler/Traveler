@@ -51,6 +51,13 @@ resource "aws_iam_role_policy" "compute_html_cache" {
         "s3:PutObject"
       ]
       Resource = "arn:aws:s3:::${data.terraform_remote_state.persistent.outputs.html_cache_bucket_name}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = "arn:aws:s3:::${data.terraform_remote_state.persistent.outputs.html_cache_bucket_name}"
     }]
   })
 }
